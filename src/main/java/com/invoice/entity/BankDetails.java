@@ -36,4 +36,5 @@ public class BankDetails {
 	@JoinColumn(name = "user_id")
 	@JsonIgnore
 	private User user;
+	
 }

@@ -14,16 +14,14 @@ import com.invoice.entity.Role;
 import jakarta.transaction.Transactional;
 
 @Repository
-public interface TokenRepository extends JpaRepository<OTP, Long>{
-	Optional<OTP>  findByEmailAndOtp(String email, String otp);
+public interface TokenRepository extends JpaRepository<OTP, Long> {
+	Optional<OTP> findByEmailAndOtp(String email, String otp);
 
 	@Modifying
-    @Transactional
-    @Query("DELETE FROM OTP t WHERE t.email = :email")
-    void deleteByEmail(@Param("email") String email);
+	@Transactional
+	@Query("DELETE FROM OTP t WHERE t.email = :email")
+	void deleteByEmail(@Param("email") String email);
 
 	Optional<OTP> findByEmail(String email);
-
-
 
 }

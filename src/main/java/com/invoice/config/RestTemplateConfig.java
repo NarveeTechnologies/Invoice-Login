@@ -19,31 +19,24 @@ import org.springframework.web.client.RestTemplate;
 public class RestTemplateConfig {
 
 	@Bean
-    public RestTemplate restTemplate() throws Exception {
-        // Trust all certificates (development only!)
-        SSLContext sslContext = SSLContexts.custom()
-                .loadTrustMaterial(null, TrustAllStrategy.INSTANCE)
-                .build();
+	public RestTemplate restTemplate() throws Exception {
+		// Trust all certificates (development only!)
+		SSLContext sslContext = SSLContexts.custom().loadTrustMaterial(null, TrustAllStrategy.INSTANCE).build();
 
-        // Build SSLConnectionSocketFactory
-        SSLConnectionSocketFactory sslSocketFactory = SSLConnectionSocketFactoryBuilder.create()
-                .setSslContext(sslContext)
-                .setHostnameVerifier((hostname, session) -> true)
-                .build();
+		// Build SSLConnectionSocketFactory
+		SSLConnectionSocketFactory sslSocketFactory = SSLConnectionSocketFactoryBuilder.create()
+				.setSslContext(sslContext).setHostnameVerifier((hostname, session) -> true).build();
 
-        // Connection manager with SSL
-        PoolingHttpClientConnectionManager connManager = PoolingHttpClientConnectionManagerBuilder.create()
-                .setSSLSocketFactory(sslSocketFactory)
-                .build();
+		// Connection manager with SSL
+		PoolingHttpClientConnectionManager connManager = PoolingHttpClientConnectionManagerBuilder.create()
+				.setSSLSocketFactory(sslSocketFactory).build();
 
-        // Build HttpClient with connection manager
-        CloseableHttpClient httpClient = HttpClients.custom()
-                .setConnectionManager(connManager)
-                .build();
+		// Build HttpClient with connection manager
+		CloseableHttpClient httpClient = HttpClients.custom().setConnectionManager(connManager).build();
 
-        // RestTemplate with HttpClient
-        HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
+		// RestTemplate with HttpClient
+		HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
 
-        return new RestTemplate(requestFactory);
-    }
+		return new RestTemplate(requestFactory);
+	}
 }

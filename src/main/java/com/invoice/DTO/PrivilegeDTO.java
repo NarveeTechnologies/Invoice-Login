@@ -8,10 +8,10 @@ import lombok.*;
 @NoArgsConstructor
 @Builder
 public class PrivilegeDTO {
-    private Long id;
-    private String name;
-    private String cardType;
-    private Boolean selected;
-    private String status;
-    private String category;
+	private Long id;
+	private String name;
+	private String cardType;
+	private Boolean selected;
+	private String status;
+	private String category;
 }

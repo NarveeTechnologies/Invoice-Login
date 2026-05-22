@@ -56,7 +56,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class UserServiceImpl implements UserService {
 
-    private final AdminRepository adminRepository;
+	private final AdminRepository adminRepository;
 
 	private final MailConfig mailConfig;
 
@@ -83,7 +83,6 @@ public class UserServiceImpl implements UserService {
 
 	@Value("${spring.mail.username}")
 	private String fromEmail;
-	
 
 	UserServiceImpl(MailConfig mailConfig, AdminRepository adminRepository) {
 		this.mailConfig = mailConfig;
@@ -101,18 +100,17 @@ public class UserServiceImpl implements UserService {
 				.pincode(user.getPincode()).city(user.getCity()).suite(user.getSuite())
 				.companylogo(user.getCompanylogo()).companyDomain(user.getCompanyDomain())
 				.telephone(user.getTelephone()).ein(user.getEin()).gstin(user.getGstin()).website(user.getWebsite())
-				.address(user.getAddress()).loginUrl(user.getLoginUrl()).adminId(user.getAdminId())
-				.build();
+				.address(user.getAddress()).loginUrl(user.getLoginUrl()).adminId(user.getAdminId()).build();
 	}
 	//
 
 	private String extractDomain(String email) {
-		   if (email == null || !email.contains("@")) {
-		        return null;
-		    }
-
-		    return email.substring(email.indexOf("@") + 1).toLowerCase();
+		if (email == null || !email.contains("@")) {
+			return null;
 		}
+
+		return email.substring(email.indexOf("@") + 1).toLowerCase();
+	}
 
 	public boolean isEmailDuplicate(String email) {
 		return userRepository.existsByEmail(email);
@@ -121,115 +119,115 @@ public class UserServiceImpl implements UserService {
 	@Transactional
 	public ManageUserDTO registerCompanyUser(ManageUsers manageUsers) {
 
-	    final String ADMIN_ROLE = "ADMIN";
+		final String ADMIN_ROLE = "ADMIN";
 
-	    // Preserve incoming values
-	    String mobileNumber  = manageUsers.getMobileNumber();
-	    String companyName   = manageUsers.getCompanyName();
-	    String state         = manageUsers.getState();
-	    String country       = manageUsers.getCountry();
-	    String city          = manageUsers.getCity();
-	    String pincode       = manageUsers.getPincode();
-	    String telephone     = manageUsers.getTelephone();
-	    String ein           = manageUsers.getEin();
-	    String gstin         = manageUsers.getGstin();
-	    String website       = manageUsers.getWebsite();
-	    String address       = manageUsers.getAddress();
-	    String businessCountry = manageUsers.getBusinessCountry();
-	    String companylogo   = manageUsers.getCompanylogo();
-	    String suite         = manageUsers.getSuite();
+		// Preserve incoming values
+		String mobileNumber = manageUsers.getMobileNumber();
+		String companyName = manageUsers.getCompanyName();
+		String state = manageUsers.getState();
+		String country = manageUsers.getCountry();
+		String city = manageUsers.getCity();
+		String pincode = manageUsers.getPincode();
+		String telephone = manageUsers.getTelephone();
+		String ein = manageUsers.getEin();
+		String gstin = manageUsers.getGstin();
+		String website = manageUsers.getWebsite();
+		String address = manageUsers.getAddress();
+		String businessCountry = manageUsers.getBusinessCountry();
+		String companylogo = manageUsers.getCompanylogo();
+		String suite = manageUsers.getSuite();
 
-	    // 1️⃣ Normalize email
-	    if (manageUsers.getEmail() == null || manageUsers.getEmail().isBlank()) {
-	        throw new BusinessException("Email is required");
-	    }
+		// 1️⃣ Normalize email
+		if (manageUsers.getEmail() == null || manageUsers.getEmail().isBlank()) {
+			throw new BusinessException("Email is required");
+		}
 
-	    String email = manageUsers.getEmail().trim().toLowerCase();
-	    manageUsers.setEmail(email);
-	    manageUsers.setPrimaryEmail(email);
+		String email = manageUsers.getEmail().trim().toLowerCase();
+		manageUsers.setEmail(email);
+		manageUsers.setPrimaryEmail(email);
 
-	    // 2️⃣ Extract domain
-	    String domain = extractDomain(email);
-	    manageUsers.setCompanyDomain(domain);
+		// 2️⃣ Extract domain
+		String domain = extractDomain(email);
+		manageUsers.setCompanyDomain(domain);
 
-	    // 3️⃣ Check ADMIN already exists
-	    if (manageUserRepository.existsByCompanyDomainAndRole_RoleNameIgnoreCase(domain, ADMIN_ROLE)) {
-	        throw new BusinessException("Company already registered. Please contact your company administrator.");
-	    }
+		// 3️⃣ Check ADMIN already exists
+		if (manageUserRepository.existsByCompanyDomainAndRole_RoleNameIgnoreCase(domain, ADMIN_ROLE)) {
+			throw new BusinessException("Company already registered. Please contact your company administrator.");
+		}
 
-	    // 4️⃣ ✅ CREATE USER FIRST
-	    User user = userRepository.findByEmailIgnoreCase(email).orElseGet(() -> {
-	        User u = new User();
-	        u.setEmail(email);
-	        u.setFirstName(manageUsers.getFirstName());
-	        u.setCompanyName(companyName);
-	        u.setMobileNumber(mobileNumber);
-	        u.setState(state);
-	        u.setCountry(country);
-	        u.setCity(city);
-	        u.setPincode(pincode);
-	        u.setTelephone(telephone);
-	        u.setEin(ein);
-	        u.setGstin(gstin);
-	        u.setWebsite(website);
-	        u.setAddress(address);
-	        u.setCompanylogo(companylogo);
-	        u.setCompanyDomain(domain);
-	        u.setSuite(suite);
-	        u.setBusinessCountry(businessCountry);
-	        u.setApproved(true);
-	        u.setActive(true);
-	        return userRepository.save(u);   // 🔥 USER SAVED FIRST
-	    });
+		// 4️⃣ ✅ CREATE USER FIRST
+		User user = userRepository.findByEmailIgnoreCase(email).orElseGet(() -> {
+			User u = new User();
+			u.setEmail(email);
+			u.setFirstName(manageUsers.getFirstName());
+			u.setCompanyName(companyName);
+			u.setMobileNumber(mobileNumber);
+			u.setState(state);
+			u.setCountry(country);
+			u.setCity(city);
+			u.setPincode(pincode);
+			u.setTelephone(telephone);
+			u.setEin(ein);
+			u.setGstin(gstin);
+			u.setWebsite(website);
+			u.setAddress(address);
+			u.setCompanylogo(companylogo);
+			u.setCompanyDomain(domain);
+			u.setSuite(suite);
+			u.setBusinessCountry(businessCountry);
+			u.setApproved(true);
+			u.setActive(true);
+			return userRepository.save(u); // 🔥 USER SAVED FIRST
+		});
 
-	    // 5️⃣ ✅ CREATE ROLE WITH adminId
-	    Role adminRole = new Role();
-	    adminRole.setRoleName(ADMIN_ROLE);
-	    adminRole.setAdminId(user.getId());
-	    adminRole.setDescription("Administrator role with full access for company: " + domain);
+		// 5️⃣ ✅ CREATE ROLE WITH adminId
+		Role adminRole = new Role();
+		adminRole.setRoleName(ADMIN_ROLE);
+		adminRole.setAdminId(user.getId());
+		adminRole.setDescription("Administrator role with full access for company: " + domain);
 
-	    // Assign all privileges
-	    Set<Privilege> allPrivileges = new HashSet<>(privilegeRepository.findAll());
-	    adminRole.setPrivileges(allPrivileges);
+		// Assign all privileges
+		Set<Privilege> allPrivileges = new HashSet<>(privilegeRepository.findAll());
+		adminRole.setPrivileges(allPrivileges);
 
-	    Role savedAdminRole = roleRepository.save(adminRole);
+		Role savedAdminRole = roleRepository.save(adminRole);
 
-	    // 6️⃣ ✅ ASSIGN ROLE TO USER
-	    user.setRole(savedAdminRole);
-	    userRepository.save(user);
+		// 6️⃣ ✅ ASSIGN ROLE TO USER
+		user.setRole(savedAdminRole);
+		userRepository.save(user);
 
-	    // 7️⃣ Set ManageUsers data
-	    manageUsers.setAdminId(user.getId());
-	    manageUsers.setRole(savedAdminRole);
-	    manageUsers.setRoleName(savedAdminRole.getRoleName());
+		// 7️⃣ Set ManageUsers data
+		manageUsers.setAdminId(user.getId());
+		manageUsers.setRole(savedAdminRole);
+		manageUsers.setRoleName(savedAdminRole.getRoleName());
 
-	    // Restore values
-	    manageUsers.setMobileNumber(mobileNumber);
-	    manageUsers.setCompanyName(companyName);
-	    manageUsers.setState(state);
-	    manageUsers.setCountry(country);
-	    manageUsers.setCity(city);
-	    manageUsers.setPincode(pincode);
-	    manageUsers.setTelephone(telephone);
-	    manageUsers.setEin(ein);
-	    manageUsers.setGstin(gstin);
-	    manageUsers.setWebsite(website);
-	    manageUsers.setAddress(address);
-	    manageUsers.setCompanylogo(companylogo);
-	    manageUsers.setCompanyDomain(domain);
-	    manageUsers.setSuite(suite);
-	    manageUsers.setBusinessCountry(businessCountry);
+		// Restore values
+		manageUsers.setMobileNumber(mobileNumber);
+		manageUsers.setCompanyName(companyName);
+		manageUsers.setState(state);
+		manageUsers.setCountry(country);
+		manageUsers.setCity(city);
+		manageUsers.setPincode(pincode);
+		manageUsers.setTelephone(telephone);
+		manageUsers.setEin(ein);
+		manageUsers.setGstin(gstin);
+		manageUsers.setWebsite(website);
+		manageUsers.setAddress(address);
+		manageUsers.setCompanylogo(companylogo);
+		manageUsers.setCompanyDomain(domain);
+		manageUsers.setSuite(suite);
+		manageUsers.setBusinessCountry(businessCountry);
 
-	    manageUsers.setApproved(true);
-	    manageUsers.setActive(true);
+		manageUsers.setApproved(true);
+		manageUsers.setActive(true);
 
-	    manageUsers.setAddedByName("SELF-REGISTERED");
-	    manageUsers.setCreatedBy(user);
-	    manageUsers.setAddedBy(user);
+		manageUsers.setAddedByName("SELF-REGISTERED");
+		manageUsers.setCreatedBy(user);
+		manageUsers.setAddedBy(user);
 
-	    ManageUsers saved = manageUserRepository.save(manageUsers);
+		ManageUsers saved = manageUserRepository.save(manageUsers);
 
-	    return convertToDTO(saved);
+		return convertToDTO(saved);
 	}
 
 	/** ===================== Register new user ===================== **/
@@ -256,7 +254,6 @@ public class UserServiceImpl implements UserService {
 		userRepository.save(user);
 		return "User registered successfully!";
 	}
-
 
 	/**
 	 * Generate alphanumeric OTP
@@ -346,7 +343,7 @@ public class UserServiceImpl implements UserService {
 
 					+ "Thank you for choosing <b>Invoicing Application</b>. Your verification code is:" + "</p>"
 					+ "<div style='display:inline-block; text-align:center; padding:18px 20px; border-radius:12px; background:#eff6ff; font-size:30px; font-weight:700; letter-spacing:0px; color:#1e3a8a;'>"
-					+ otp.trim()+ "</div>" + "<p style='text-align:center; font-size:15px; color:#6b7280;'>"
+					+ otp.trim() + "</div>" + "<p style='text-align:center; font-size:15px; color:#6b7280;'>"
 					+ "This OTP is valid for <strong>2 minutes</strong>. Please do not share this code with anyone."
 					+ "</p>" + "<p style='font-size:14px; color:#333; margin-top:30px;'>"
 					+ "Best Regards,<br><b>Invoicing Team</b>" + "</p>" + "</td>" + "</tr>" + "<tr>"
@@ -459,24 +456,21 @@ public class UserServiceImpl implements UserService {
 			throw new RuntimeException("User is inactive. Contact admin.");
 		}
 
-		
-		Long roleId = manageUser.getRole().getRoleId();   // changed from roleName
+		Long roleId = manageUser.getRole().getRoleId(); // changed from roleName
 		String roleName = null;
 		Set<String> privilegeNames = new HashSet<>();
 
 		if (roleId != null) {
-		    Role roleEntity = roleRepository.findById(roleId).orElse(null);
+			Role roleEntity = roleRepository.findById(roleId).orElse(null);
 
-		    if (roleEntity != null) {
-		        roleName = roleEntity.getRoleName();  // still needed for JWT
+			if (roleEntity != null) {
+				roleName = roleEntity.getRoleName(); // still needed for JWT
 
-		        if (roleEntity.getPrivileges() != null) {
-		            privilegeNames = roleEntity.getPrivileges()
-		                    .stream()
-		                    .map(Privilege::getName)
-		                    .collect(Collectors.toSet());
-		        }
-		    }
+				if (roleEntity.getPrivileges() != null) {
+					privilegeNames = roleEntity.getPrivileges().stream().map(Privilege::getName)
+							.collect(Collectors.toSet());
+				}
+			}
 		}
 
 		// Generate JWT with roleName + privileges
@@ -578,7 +572,7 @@ public class UserServiceImpl implements UserService {
 				Optional.ofNullable(user.getLastName()).orElse("")).trim();
 		return name.isEmpty() ? user.getEmail().split("@")[0] : name;
 	}
-    
+
 	@Override
 	public UserProfileResponse getUserProfileByEmail(String email) {
 
@@ -670,8 +664,8 @@ public class UserServiceImpl implements UserService {
 	private boolean hasText(String value) {
 		return value != null && !value.isBlank();
 	}
-	
- 	@Override
+
+	@Override
 	@Transactional
 	public boolean verifyOtp(String emailInput, String otpInput) {
 
@@ -721,7 +715,6 @@ public class UserServiceImpl implements UserService {
 
 		manageUsers.setBusinessCountry(request.getBusinessCountry());
 
-		
 		manageUsers.setState(request.getState());
 		manageUsers.setCity(request.getCity());
 		manageUsers.setCountry(request.getCountry());
@@ -738,7 +731,6 @@ public class UserServiceImpl implements UserService {
 		manageUsers.setCompanylogo(request.getCompanylogo());
 		manageUsers.setCompanyDomain(request.getCompanyDomain());
 		manageUsers.setSuite(request.getSuite());
-
 
 		// Optional fields (if available in RegisterRequest)
 //		    manageUsers.setAlternativeEmail(request.getAlternativeEmail());
@@ -823,4 +815,4 @@ public class UserServiceImpl implements UserService {
 		}
 	}
 
-	}
+}

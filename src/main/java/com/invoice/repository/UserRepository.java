@@ -38,8 +38,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 	// (Optional) Find users with that role if you ever want to nullify before
 	// delete
 	List<User> findByRole_RoleId(Long roleId);
-	
-	public boolean existsByEmail(String email);
 
+	public boolean existsByEmail(String email);
 
 }

@@ -1,7 +1,5 @@
 package com.invoice.repository;
 
-
-
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -15,27 +13,25 @@ import com.invoice.entity.Privilege;
 
 public interface PrivilegeRepository extends JpaRepository<Privilege, Long> {
 
-    Privilege findByName(String name);
-    
-    Set<Privilege> findByCategory(String category);
+	Privilege findByName(String name);
 
-    List<Privilege> getPrivilegesByCategory(String category);
-    
- // Fetch privileges by category (case-insensitive)
-    List<Privilege> findByCategoryIgnoreCase(String category);
+	Set<Privilege> findByCategory(String category);
 
-    // Optional: fetch by name (if needed)
-    Optional<Privilege> findByNameIgnoreCase(String name);
-    
- // Step 1: Find all privilege IDs by category (string)
-    @Query("SELECT p.id FROM Privilege p WHERE p.category = :category")
-    List<Long> findIdsByCategory(@Param("category") String category);
+	List<Privilege> getPrivilegesByCategory(String category);
 
-    // Step 2: Delete all privileges by category (string)
-    @Modifying
-    @Query("DELETE FROM Privilege p WHERE p.category = :category")
-    void deleteByCategory(@Param("category") String category);
+	// Fetch privileges by category (case-insensitive)
+	List<Privilege> findByCategoryIgnoreCase(String category);
 
+	// Optional: fetch by name (if needed)
+	Optional<Privilege> findByNameIgnoreCase(String name);
 
+	// Step 1: Find all privilege IDs by category (string)
+	@Query("SELECT p.id FROM Privilege p WHERE p.category = :category")
+	List<Long> findIdsByCategory(@Param("category") String category);
+
+	// Step 2: Delete all privileges by category (string)
+	@Modifying
+	@Query("DELETE FROM Privilege p WHERE p.category = :category")
+	void deleteByCategory(@Param("category") String category);
 
 }

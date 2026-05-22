@@ -20,34 +20,32 @@ import com.invoice.serviceImpl.UserServiceImpl;
 @RequestMapping("/auth")
 public class JwtValidationController {
 
-    @Autowired
-    private JwtServiceImpl jwtService;
+	@Autowired
+	private JwtServiceImpl jwtService;
 
-    @Autowired
-    private UserServiceImpl userService;
+	@Autowired
+	private UserServiceImpl userService;
 
-    @PostMapping("/validate-token")
-    public ResponseEntity<Map<String, Object>> validateToken(@RequestHeader("Authorization") String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "Missing or invalid Authorization header"));
-        }
+	@PostMapping("/validate-token")
+	public ResponseEntity<Map<String, Object>> validateToken(@RequestHeader("Authorization") String authHeader) {
+		if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+					.body(Map.of("error", "Missing or invalid Authorization header"));
+		}
 
-        String token = authHeader.substring(7);
-        if (!jwtService.validateToken(token)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "Invalid or expired token"));
-        }
+		String token = authHeader.substring(7);
+		if (!jwtService.validateToken(token)) {
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid or expired token"));
+		}
 
-        String email = jwtService.extractUsername(token);
-        User user = userService.getUserByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+		String email = jwtService.extractUsername(token);
+		User user = userService.getUserByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("username", user.getEmail());
-        response.put("roles", List.of(user.getRole().getRoleName().toUpperCase()));
-        response.put("userId", user.getId());
+		Map<String, Object> response = new HashMap<>();
+		response.put("username", user.getEmail());
+		response.put("roles", List.of(user.getRole().getRoleName().toUpperCase()));
+		response.put("userId", user.getId());
 
-        return ResponseEntity.ok(response);
-    }
+		return ResponseEntity.ok(response);
+	}
 }

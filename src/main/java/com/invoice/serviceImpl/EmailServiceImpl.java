@@ -26,7 +26,6 @@ public class EmailServiceImpl implements EmailService {
 	@Value("${app.frontend.url}")
 	private String loginUrl;
 
-	
 	@Async
 	@Override
 	public void sendRegistrationEmail(String toEmail, String fullName, String roleName) {

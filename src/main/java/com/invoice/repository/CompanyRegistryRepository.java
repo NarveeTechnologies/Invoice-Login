@@ -8,7 +8,9 @@ import java.util.List;
 import java.util.Optional;
 
 public interface CompanyRegistryRepository extends JpaRepository<CompanyRegistry, Long> {
-    Optional<CompanyRegistry> findByCompanyDomain(String companyDomain);
-    List<CompanyRegistry> findAllByActiveTrue();
-    boolean existsByCompanyDomain(String companyDomain);
+	Optional<CompanyRegistry> findByCompanyDomain(String companyDomain);
+
+	List<CompanyRegistry> findAllByActiveTrue();
+
+	boolean existsByCompanyDomain(String companyDomain);
 }

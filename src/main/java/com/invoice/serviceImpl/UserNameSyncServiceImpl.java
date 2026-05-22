@@ -16,27 +16,26 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @Transactional
 public class UserNameSyncServiceImpl {
-	
-	 private static final Logger log = LoggerFactory.getLogger(UserNameSyncServiceImpl.class);
 
-    private final RoleRepository roleRepository;
-    private final ManageUserRepository manageUserRepository;
-    private final UserRepository userRepository;
+	private static final Logger log = LoggerFactory.getLogger(UserNameSyncServiceImpl.class);
 
-    public void syncUserFullName(Long userId, String fullName) {
-    	
-    	log.info("Syncing fullName '{}' for userId={}", fullName, userId);
+	private final RoleRepository roleRepository;
+	private final ManageUserRepository manageUserRepository;
+	private final UserRepository userRepository;
 
+	public void syncUserFullName(Long userId, String fullName) {
 
-        // 1️⃣ Roles table
-        roleRepository.updateAddedByName(userId, fullName);
-        roleRepository.updateUpdatedByName(userId, fullName);
+		log.info("Syncing fullName '{}' for userId={}", fullName, userId);
 
-        // 2️⃣ ManageUsers table
-        manageUserRepository.updateAddedByName(userId, fullName);
-        manageUserRepository.updateUpdatedByName(userId, fullName);
+		// 1️⃣ Roles table
+		roleRepository.updateAddedByName(userId, fullName);
+		roleRepository.updateUpdatedByName(userId, fullName);
 
-        // 3️⃣ User table (self reference)
-        userRepository.updateFullName(userId, fullName);
-    }
+		// 2️⃣ ManageUsers table
+		manageUserRepository.updateAddedByName(userId, fullName);
+		manageUserRepository.updateUpdatedByName(userId, fullName);
+
+		// 3️⃣ User table (self reference)
+		userRepository.updateFullName(userId, fullName);
+	}
 }

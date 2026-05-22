@@ -44,31 +44,28 @@ public class RoleController {
 	private static final Logger log = LoggerFactory.getLogger(RoleController.class);
 
 	@PostMapping(value = "/save", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public ResponseEntity<RestAPIResponse> createRole(@RequestBody RoleDTO roleDTO,
-	                                                  Authentication authentication) {
-	    try {
-	        String loggedInEmail = authentication.getName();
-	        RoleDTO saved = roleServiceImpl.createRole(roleDTO, loggedInEmail);
+	public ResponseEntity<RestAPIResponse> createRole(@RequestBody RoleDTO roleDTO, Authentication authentication) {
+		try {
+			String loggedInEmail = authentication.getName();
+			RoleDTO saved = roleServiceImpl.createRole(roleDTO, loggedInEmail);
 
-	        return ResponseEntity.ok(
-	                new RestAPIResponse("success", "Role saved successfully", saved));
+			return ResponseEntity.ok(new RestAPIResponse("success", "Role saved successfully", saved));
 
-	    } catch (org.springframework.dao.DataIntegrityViolationException e) {
+		} catch (org.springframework.dao.DataIntegrityViolationException e) {
 
-	        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-	                .body(new RestAPIResponse("error", 
-	                        "Role already exists for this admin", null));
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+					.body(new RestAPIResponse("error", "Role already exists for this admin", null));
 
-	    } catch (RuntimeException e) {
+		} catch (RuntimeException e) {
 
-	        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-	                .body(new RestAPIResponse("error", e.getMessage(), null));
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+					.body(new RestAPIResponse("error", e.getMessage(), null));
 
-	    } catch (Exception e) {
+		} catch (Exception e) {
 
-	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-	                .body(new RestAPIResponse("error", "Something went wrong", null));
-	    }
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body(new RestAPIResponse("error", "Something went wrong", null));
+		}
 	}
 
 	// ✅ Assign privileges category-wise to a role
@@ -207,47 +204,34 @@ public class RoleController {
 					.body(new RestAPIResponse("error", "Failed to delete role: " + e.getMessage(), null));
 		}
 	}
-	
+
 	@GetMapping("/roles/{adminId}")
 	public ResponseEntity<RestAPIResponse> getRolesByAdminId(@PathVariable Long adminId) {
 
-	    try {
+		try {
 
-	        List<RoleDTO> roles = roleServiceImpl.getRolesByAdminId(adminId);
+			List<RoleDTO> roles = roleServiceImpl.getRolesByAdminId(adminId);
 
-	        return ResponseEntity.ok(
-	                new RestAPIResponse("success", "Roles retrieved successfully", roles));
+			return ResponseEntity.ok(new RestAPIResponse("success", "Roles retrieved successfully", roles));
 
-	    } catch (Exception e) {
+		} catch (Exception e) {
 
-	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-	                .body(new RestAPIResponse("error", e.getMessage(), null));
-	    }
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body(new RestAPIResponse("error", e.getMessage(), null));
+		}
 	}
-	
-	
+
 	@GetMapping("/adminId/search")
-	public ResponseEntity<RestAPIResponse> searchRoles(
-	        @RequestParam(defaultValue = "0") int page,
-	        @RequestParam(defaultValue = "10") int size,
-	        @RequestParam(defaultValue = "roleId") String sortBy,
-	        @RequestParam(defaultValue = "asc") String sortDir,
-	        @RequestParam(required = false) String keyword,
-	        Authentication authentication) {
+	public ResponseEntity<RestAPIResponse> searchRoles(@RequestParam(defaultValue = "0") int page,
+			@RequestParam(defaultValue = "10") int size, @RequestParam(defaultValue = "roleId") String sortBy,
+			@RequestParam(defaultValue = "asc") String sortDir, @RequestParam(required = false) String keyword,
+			Authentication authentication) {
 
-	    String loggedInEmail = authentication.getName();
+		String loggedInEmail = authentication.getName();
 
-	    Page<RoleDTO> result = roleServiceImpl.searchRoles(
-	            page,
-	            size,
-	            sortBy,
-	            sortDir,
-	            SanitizerUtils.sanitize(keyword),
-	            loggedInEmail
-	    );
+		Page<RoleDTO> result = roleServiceImpl.searchRoles(page, size, sortBy, sortDir,
+				SanitizerUtils.sanitize(keyword), loggedInEmail);
 
-	    return ResponseEntity.ok(
-	            new RestAPIResponse("success", "Roles fetched successfully", result)
-	    );
+		return ResponseEntity.ok(new RestAPIResponse("success", "Roles fetched successfully", result));
 	}
 }

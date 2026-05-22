@@ -5,8 +5,8 @@ import java.io.PrintWriter;
 
 public class FileStorageException extends RuntimeException {
 
-	 public FileStorageException(String message) {
-	        super(message);
-	    }
+	public FileStorageException(String message) {
+		super(message);
+	}
 
 }

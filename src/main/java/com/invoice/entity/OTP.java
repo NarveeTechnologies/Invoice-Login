@@ -15,11 +15,11 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Entity
 public class OTP {
-	
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-        private Long otpId;
-        private String email;
-        private String otp;
-        private long expiryTime;
+	private Long otpId;
+	private String email;
+	private String otp;
+	private long expiryTime;
 }

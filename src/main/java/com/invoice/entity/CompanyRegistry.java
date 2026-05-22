@@ -30,6 +30,7 @@ public class CompanyRegistry {
 
     @Column(name = "logo_url")
     private String logoUrl;
+    
 
     @Column(name = "registered_at", nullable = false)
     private LocalDateTime registeredAt = LocalDateTime.now();
@@ -47,4 +48,5 @@ public class CompanyRegistry {
         this.registeredAt = LocalDateTime.now();
         this.active = true;
     }
+    
 }

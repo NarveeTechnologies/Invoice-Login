@@ -35,5 +35,6 @@ public class Admin {
 	private String businessId;
 	private String prefferedCurrency;
 	private String invoicePrefix;
+	
 
 }

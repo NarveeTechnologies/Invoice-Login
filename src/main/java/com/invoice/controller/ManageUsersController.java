@@ -55,12 +55,11 @@ public class ManageUsersController {
 	@PreAuthorize("hasAuthority('USER_CREATE')")
 	@PostMapping("/manageusers/save")
 	public ResponseEntity<RestAPIResponse> createUser(@RequestBody ManageUsers manageUsers,
-	        Authentication authentication) {
-	    String loggedInEmail = authentication.getName();
-	    ManageUserDTO savedUser = manageUsersService.createUser(manageUsers, loggedInEmail);
-	    return ResponseEntity.ok(new RestAPIResponse("Success", "User created successfully", savedUser));
+			Authentication authentication) {
+		String loggedInEmail = authentication.getName();
+		ManageUserDTO savedUser = manageUsersService.createUser(manageUsers, loggedInEmail);
+		return ResponseEntity.ok(new RestAPIResponse("Success", "User created successfully", savedUser));
 	}
-
 
 	@PutMapping("/manageusers/{id}")
 	public ResponseEntity<RestAPIResponse> updateUser(@PathVariable Long id, @RequestBody ManageUsers manageUsers,

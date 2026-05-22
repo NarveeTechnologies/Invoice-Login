@@ -132,12 +132,8 @@ public class UserController {
 				String schemaName = TenantContext.toSchemaName(response.getCompanyDomain());
 				String savedLogo = manageUsers.getCompanylogo();
 				if (!companyRegistryRepository.existsByCompanyDomain(response.getCompanyDomain())) {
-					companyRegistryRepository.save(new CompanyRegistry(
-							response.getCompanyName(),
-							response.getCompanyDomain(),
-							schemaName,
-							response.getEmail(),
-							savedLogo));
+					companyRegistryRepository.save(new CompanyRegistry(response.getCompanyName(),
+							response.getCompanyDomain(), schemaName, response.getEmail(), savedLogo));
 				}
 			} catch (Exception e) {
 				log.error("Company registry save failed for domain {}", response.getCompanyDomain(), e);
@@ -155,19 +151,17 @@ public class UserController {
 
 			if (roleId != null) {
 
-			    Role roleEntity = roleRepository.findById(roleId).orElse(null);
+				Role roleEntity = roleRepository.findById(roleId).orElse(null);
 
-			    if (roleEntity != null) {
+				if (roleEntity != null) {
 
-			        roleName = roleEntity.getRoleName(); // keep for further use
+					roleName = roleEntity.getRoleName(); // keep for further use
 
-			        if (roleEntity.getPrivileges() != null) {
-			            privilegeNames = roleEntity.getPrivileges()
-			                    .stream()
-			                    .map(Privilege::getName)
-			                    .collect(Collectors.toSet());
-			        }
-			    }
+					if (roleEntity.getPrivileges() != null) {
+						privilegeNames = roleEntity.getPrivileges().stream().map(Privilege::getName)
+								.collect(Collectors.toSet());
+					}
+				}
 			}
 
 			String token = jwtService.generateToken(user, roleName, privilegeNames);
@@ -206,18 +200,16 @@ public class UserController {
 			finalResponse.put("privileges", privilegeNames);
 			finalResponse.put("companylogo", logoUrl);
 			finalResponse.put("adminId", savedUser.getAdminId());
-			finalResponse.put("companydomain",savedUser.getCompanyDomain());
+			finalResponse.put("companydomain", savedUser.getCompanyDomain());
 			finalResponse.put("token", token);
 
 			return ResponseEntity.status(HttpStatus.CREATED).body(
 					new RestAPIResponse("success", "Company registered successfully. ADMIN created.", finalResponse));
 
-		}catch (DataIntegrityViolationException e) {
-			    return ResponseEntity.status(HttpStatus.CONFLICT)
-			        .body(new RestAPIResponse("failed", 
-			            e.getMostSpecificCause().getMessage(), null));
-			}
-			catch (Exception e) {
+		} catch (DataIntegrityViolationException e) {
+			return ResponseEntity.status(HttpStatus.CONFLICT)
+					.body(new RestAPIResponse("failed", e.getMostSpecificCause().getMessage(), null));
+		} catch (Exception e) {
 
 			log.error("Registration failed", e);
 
@@ -313,8 +305,6 @@ public class UserController {
 				isValid ? "Token is valid" : "Token is invalid", username));
 	}
 
-
-
 	@GetMapping("/updated/email/{email}")
 	public ResponseEntity<RestAPIResponse> getUserProfileByEmail(@PathVariable("email") String email) {
 
@@ -328,8 +318,6 @@ public class UserController {
 		return ResponseEntity.ok(new RestAPIResponse("Success", "Profile retrieved successfully", response));
 	}
 
-
-	
 	@GetMapping("/me")
 	public ResponseEntity<RestAPIResponse> getMyProfile(@RequestHeader("Authorization") String token) {
 		try {
@@ -390,56 +378,47 @@ public class UserController {
 		tokenData.put("expiresIn", "24 hours");
 		return ResponseEntity.ok(new RestAPIResponse("success", "Registration token generated", tokenData));
 	}
+
+	// Preview image in Postman
+	@GetMapping("/{filename:.+}")
+	public ResponseEntity<Resource> getFile(@PathVariable String filename) {
+		try {
+			Resource resource = fileStorageService.loadFile(filename);
+
+			// Detect content type dynamically
+			String contentType = Files.probeContentType(resource.getFile().toPath());
+			if (contentType == null) {
+				contentType = "application/octet-stream";
+			}
+
+			return ResponseEntity.ok().contentType(MediaType.parseMediaType(contentType))
+					.header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + resource.getFilename() + "\"")
+					.body(resource);
+
+		} catch (IOException e) {
+			return ResponseEntity.notFound().build();
+		}
+	}
+
+	@PutMapping(value = "/logo/{adminId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	public ResponseEntity<?> updateLogo(@PathVariable Long adminId, @RequestParam("companylogo") MultipartFile file) {
+		try {
+
+			if (file == null || file.isEmpty()) {
+				return ResponseEntity.badRequest()
+						.body(Map.of("status", "FAILED", "message", "File is empty or not provided"));
+			}
+
+			String filename = fileStorageService.updateLogo(adminId, file);
+
+			return ResponseEntity
+					.ok(Map.of("status", "SUCCESS", "message", "Logo updated successfully", "fileName", filename));
+
+		} catch (Exception e) {
+
+			return ResponseEntity.badRequest().body(Map.of("status", "FAILED", "message", e.getMessage()));
+		}
+	}
+
 	
-   // Preview image in Postman
-    @GetMapping("/{filename:.+}")
-    public ResponseEntity<Resource> getFile(@PathVariable String filename) {
-        try {
-            Resource resource = fileStorageService.loadFile(filename);
-
-            // Detect content type dynamically
-            String contentType = Files.probeContentType(resource.getFile().toPath());
-            if (contentType == null) {
-                contentType = "application/octet-stream";
-            }
-
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(contentType))
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + resource.getFilename() + "\"")
-                    .body(resource);
-
-        } catch (IOException e) {
-            return ResponseEntity.notFound().build();
-        }
-    }
-    @PutMapping(value = "/logo/{adminId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> updateLogo(
-            @PathVariable Long adminId,
-            @RequestParam("companylogo") MultipartFile file) {
-        try {
-
-            if (file == null || file.isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of(
-                        "status", "FAILED",
-                        "message", "File is empty or not provided"
-                ));
-            }
-
-            String filename = fileStorageService.updateLogo(adminId, file);
-
-            return ResponseEntity.ok(Map.of(
-                    "status", "SUCCESS",
-                    "message", "Logo updated successfully",
-                    "fileName", filename
-            ));
-
-        } catch (Exception e) {
-
-            return ResponseEntity.badRequest().body(Map.of(
-                    "status", "FAILED",
-                    "message", e.getMessage()
-            ));
-        }
-    }
-    
 }

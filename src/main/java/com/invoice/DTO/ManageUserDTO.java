@@ -33,7 +33,7 @@ public class ManageUserDTO {
 	private String businessCountry;
 	private String suite;
 	private String companylogo;
-    private String companyDomain;
+	private String companyDomain;
 
 	private String state;
 	private String country;
@@ -46,10 +46,9 @@ public class ManageUserDTO {
 	private String address;
 	private String token;
 	private String loginUrl;
-	
+
 	private long adminId;
-	
-	
+
 	private String fid;
 	private String everifyId;
 	private String dunsNumber;
@@ -58,9 +57,7 @@ public class ManageUserDTO {
 	private String signingAuthorityName;
 	private String designation;
 	private String dateOfIncorporation;
-	
+
 	private List<BankDetails> BankDetails;
 
-
-	
 }

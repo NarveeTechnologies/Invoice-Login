@@ -29,13 +29,13 @@ public class RegisterRequest {
 
 	@JsonProperty("companyName")
 	private String companyName;
-	
+
 	@JsonProperty("state")
 	private String state;
 
 	@JsonProperty("country")
 	private String country;
-	
+
 	@JsonProperty("city")
 	private String city;
 
@@ -50,33 +50,32 @@ public class RegisterRequest {
 
 	@JsonProperty("gstin")
 	private String gstin;
-	
+
 	@JsonProperty("businessCountry")
 	private String businessCountry;
-	
+
 	@JsonProperty("suite")
 	private String suite;
-	
+
 	@JsonProperty("companylogo")
 	private String companylogo;
 
 	@JsonProperty("primaryEmail")
-	private String primaryEmail; 
+	private String primaryEmail;
 
 	@JsonProperty("website")
 	private String website;
-	
+
 	@JsonProperty("address")
 	private String address;
-	
+
 	@JsonProperty("token")
 	private String token;
-	
+
 	@JsonProperty("companyDomain")
-    private String companyDomain;
-	
+	private String companyDomain;
+
 	@JsonProperty("adminId")
 	private long adminId;
 
-	
 }

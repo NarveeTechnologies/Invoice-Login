@@ -34,57 +34,49 @@ import lombok.ToString;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@ToString(exclude = {"privileges"})
+@ToString(exclude = { "privileges" })
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "roleId")
 @Entity
-@Table(
-	    name = "roles",
-	    uniqueConstraints = @UniqueConstraint(
-	        columnNames = {"role_name", "admin_id"}
-	    )
-	)
+@Table(name = "roles", uniqueConstraints = @UniqueConstraint(columnNames = { "role_name", "admin_id" }))
 public class Role {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @EqualsAndHashCode.Include
-    @Column(name = "roleid")
-    private Long roleId;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@EqualsAndHashCode.Include
+	@Column(name = "roleid")
+	private Long roleId;
 
-    @Column(name = "role_name", nullable = false)
-    private String roleName; // ✅ keep this field
+	@Column(name = "role_name", nullable = false)
+	private String roleName; // ✅ keep this field
 
-    private String description;
-    private String status;
-    private Long adminId;
-    private Long addedBy;
-    private Long updatedBy;
-    private String addedByName;
-    private String updatedByName;
-    private LocalDateTime createdDate;
-    private LocalDateTime updatedDate;
+	private String description;
+	private String status;
+	private Long adminId;
+	private Long addedBy;
+	private Long updatedBy;
+	private String addedByName;
+	private String updatedByName;
+	private LocalDateTime createdDate;
+	private LocalDateTime updatedDate;
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-        name = "role_privileges",
-        joinColumns = @JoinColumn(name = "roleid"),
-        inverseJoinColumns = @JoinColumn(name = "privilegeid")
-    )
-    private Set<Privilege> privileges = new HashSet<>();
+	@ManyToMany(fetch = FetchType.LAZY)
+	@JoinTable(name = "role_privileges", joinColumns = @JoinColumn(name = "roleid"), inverseJoinColumns = @JoinColumn(name = "privilegeid"))
+	private Set<Privilege> privileges = new HashSet<>();
 
-    @PrePersist
-    public void onCreate() {
-        this.createdDate = LocalDateTime.now();
-        if (this.status == null) this.status = "Active";
+	@PrePersist
+	public void onCreate() {
+		this.createdDate = LocalDateTime.now();
+		if (this.status == null)
+			this.status = "Active";
 
-        if (this.roleName == null || this.roleName.isBlank()) {
-            throw new IllegalStateException("roleName cannot be null or blank!");
-        }
-    }
+		if (this.roleName == null || this.roleName.isBlank()) {
+			throw new IllegalStateException("roleName cannot be null or blank!");
+		}
+	}
 
-    @PreUpdate
-    public void onUpdate() {
-        this.updatedDate = LocalDateTime.now();
-    }
+	@PreUpdate
+	public void onUpdate() {
+		this.updatedDate = LocalDateTime.now();
+	}
 }

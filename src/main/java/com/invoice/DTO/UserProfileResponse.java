@@ -28,7 +28,6 @@ public class UserProfileResponse {
 	private String invoicePrefix;
 	private String profilePicPath;
 	private String role;
-
 	private String state;
 	private String country;
 	private String city;
@@ -51,5 +50,4 @@ public class UserProfileResponse {
 	private String designation;
 	private String dateOfIncorporation;
 	private List<BankDetails> bankDetails;
-
 }

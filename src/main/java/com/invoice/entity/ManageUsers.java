@@ -101,7 +101,7 @@ public class ManageUsers {
 	private Boolean active = true;
 
 	private String invoicePrefix;
-	
+
 	@Column(name = "businessCountry")
 	private String businessCountry;
 
@@ -137,16 +137,15 @@ public class ManageUsers {
 
 	@Column(name = "loginurl")
 	private String loginUrl;
-	
+
 	@Column(name = "suite")
 	private String suite;
-	
+
 	@Column(name = "companylogo")
 	private String companylogo;
-	
+
 	@Column(name = "admin_id")
 	private Long adminId;
-
 
 	private String fid;
 	private String everifyId;
@@ -157,7 +156,7 @@ public class ManageUsers {
 	private String designation;
 	private String dateOfIncorporation;
 	private String taxId;
-	
+
 	@ElementCollection(fetch = FetchType.EAGER)
 	private List<BankDetails> bankDetails;
 
@@ -173,7 +172,7 @@ public class ManageUsers {
 	@PreUpdate
 	public void normalizeAndValidate() {
 
-		// Normalize names 
+		// Normalize names
 		this.firstName = capitalize(this.firstName);
 		this.middleName = capitalize(this.middleName);
 		this.lastName = capitalize(this.lastName);
@@ -230,7 +229,5 @@ public class ManageUsers {
 	private boolean hasText(String value) {
 		return value != null && !value.isBlank();
 	}
-
-	
 
 }

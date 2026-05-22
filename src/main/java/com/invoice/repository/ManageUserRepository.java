@@ -22,19 +22,16 @@ import jakarta.transaction.Transactional;
 public interface ManageUserRepository extends JpaRepository<ManageUsers, Long>, JpaSpecificationExecutor<ManageUsers> {
 
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
-	@Query("""
-			    UPDATE ManageUsers m
-			    SET m.addedByName = :fullName
-			    WHERE m.addedBy.id = :userId
-			""")
+	@Query("\r\n"
+			+ "			    UPDATE ManageUsers m\r\n"
+			+ "			    SET m.addedByName = :fullName\r\n"
+			+ "			    WHERE m.addedBy.id = :userId")
 	void updateAddedByName(Long userId, String fullName);
 
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
-	@Query("""
-			    UPDATE ManageUsers m
-			    SET m.updatedByName = :fullName
-			    WHERE m.updatedBy = :userId
-			""")
+	@Query("  UPDATE ManageUsers m\r\n"
+			+ "			    SET m.updatedByName = :fullName\r\n"
+			+ "			    WHERE m.updatedBy = :userId")
 	void updateUpdatedByName(Long userId, String fullName);
 
 	// === Existing methods ===
@@ -76,33 +73,29 @@ public interface ManageUserRepository extends JpaRepository<ManageUsers, Long>, 
 //                                      Pageable pageable);
 
 	// === Global search (for SUPERADMIN) ===
-	@Query("""
-			    SELECT m FROM ManageUsers m
-			    WHERE LOWER(m.firstName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			          LOWER(m.middleName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			          LOWER(m.lastName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			          LOWER(m.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			          LOWER(m.role.roleName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			          LOWER(m.updatedByName) LIKE LOWER(CONCAT('%', :keyword, '%'))
-			""")
+	@Query("SELECT m FROM ManageUsers m\r\n"
+			+ "			    WHERE LOWER(m.firstName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			          LOWER(m.middleName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			          LOWER(m.lastName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			          LOWER(m.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			          LOWER(m.role.roleName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			          LOWER(m.updatedByName) LIKE LOWER(CONCAT('%', :keyword, '%'))")
 	Page<ManageUsers> search(@Param("keyword") String keyword, Pageable pageable);
 
-	@Query("""
-			    SELECT u FROM ManageUsers u
-			    LEFT JOIN FETCH u.role r
-			    WHERE
-			        (:keyword IS NULL OR :keyword = '' OR
-			         LOWER(u.firstName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			         LOWER(u.middleName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			         LOWER(u.lastName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			         LOWER(u.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			         LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			         LOWER(u.primaryEmail) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			         LOWER(r.roleName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			         LOWER(u.addedByName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-			         LOWER(u.updatedByName) LIKE LOWER(CONCAT('%', :keyword, '%'))
-			        )
-			""")
+	@Query(" SELECT u FROM ManageUsers u\r\n"
+			+ "			    LEFT JOIN FETCH u.role r\r\n"
+			+ "			    WHERE\r\n"
+			+ "			        (:keyword IS NULL OR :keyword = '' OR\r\n"
+			+ "			         LOWER(u.firstName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			         LOWER(u.middleName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			         LOWER(u.lastName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			         LOWER(u.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			         LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			         LOWER(u.primaryEmail) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			         LOWER(r.roleName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			         LOWER(u.addedByName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
+			+ "			         LOWER(u.updatedByName) LIKE LOWER(CONCAT('%', :keyword, '%'))\r\n"
+			+ "			        )")
 	Page<ManageUsers> searchUsers(@Param("keyword") String keyword, Pageable pageable);
 
 	boolean existsByCompanyDomainAndRoleNameIgnoreCase(String companyDomain, String roleName);

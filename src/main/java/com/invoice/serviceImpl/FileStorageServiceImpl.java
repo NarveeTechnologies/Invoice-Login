@@ -22,111 +22,109 @@ import com.invoice.service.FileStorageService;
 
 @Service
 public class FileStorageServiceImpl implements FileStorageService {
-	
 
-    // Use Path instead of String
-    private final Path uploadDir = Paths.get("uploads");
-    
-    @Autowired
-    private ManageUserRepository manageUsersRepository;
-    
-    @Autowired
+	// Use Path instead of String
+	private final Path uploadDir = Paths.get("uploads");
+
+	@Autowired
+	private ManageUserRepository manageUsersRepository;
+
+	@Autowired
 	private UserRepository userRepository;
 
+	public FileStorageServiceImpl() throws IOException {
+		if (!Files.exists(uploadDir)) {
+			Files.createDirectories(uploadDir);
+		}
+	}
 
-    public FileStorageServiceImpl() throws IOException {
-        if (!Files.exists(uploadDir)) {
-            Files.createDirectories(uploadDir);
-        }
-    }
+	@Override
+	public String saveFile(MultipartFile file) {
+		try {
+			String originalFileName = file.getOriginalFilename();
+			String extension = originalFileName.substring(originalFileName.lastIndexOf("."));
+			String fileName = UUID.randomUUID().toString() + extension;
 
-    @Override
-    public String saveFile(MultipartFile file) {
-        try {
-            String originalFileName = file.getOriginalFilename();
-            String extension = originalFileName.substring(originalFileName.lastIndexOf("."));
-            String fileName = UUID.randomUUID().toString() + extension;
+			Path filePath = uploadDir.resolve(fileName); // ✅ resolve works here
+			Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-            Path filePath = uploadDir.resolve(fileName); // ✅ resolve works here
-            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+			return fileName;
 
-            return fileName;
+		} catch (Exception e) {
+			throw new RuntimeException("File upload failed: " + e.getMessage());
+		}
+	}
 
-        } catch (Exception e) {
-            throw new RuntimeException("File upload failed: " + e.getMessage());
-        }
-    }
+	@Override
+	public Resource loadFile(String filename) throws IOException {
+		Path filePath = uploadDir.resolve(filename).normalize(); // ✅ works now
+		UrlResource resource = new UrlResource(filePath.toUri());
+		if (resource.exists() && resource.isReadable()) {
+			return resource;
+		} else {
+			throw new IOException("File not found: " + filename);
+		}
+	}
 
-    @Override
-    public Resource loadFile(String filename) throws IOException {
-        Path filePath = uploadDir.resolve(filename).normalize(); // ✅ works now
-        UrlResource resource = new UrlResource(filePath.toUri());
-        if (resource.exists() && resource.isReadable()) {
-            return resource;
-        } else {
-            throw new IOException("File not found: " + filename);
-        }
-    }
-	
-    @Override
-    public String updateLogo(Long createdById, MultipartFile file) throws IOException {
+	@Override
+	public String updateLogo(Long createdById, MultipartFile file) throws IOException {
 
-        // 1️⃣ Validate file
-        if (file == null || file.isEmpty()) {
-            throw new RuntimeException("Please upload a valid file");
-        }
+		// 1️⃣ Validate file
+		if (file == null || file.isEmpty()) {
+			throw new RuntimeException("Please upload a valid file");
+		}
 
-        // 2️⃣ Find ManageUsers by createdBy
-        List<ManageUsers> users = manageUsersRepository.findByCreatedBy_Id(createdById);
+		// 2️⃣ Find ManageUsers by createdBy
+		List<ManageUsers> users = manageUsersRepository.findByCreatedBy_Id(createdById);
 
-        if (users.isEmpty()) {
-            throw new RuntimeException("Admin not found with createdBy: " + createdById);
-        }
+		if (users.isEmpty()) {
+			throw new RuntimeException("Admin not found with createdBy: " + createdById);
+		}
 
-        ManageUsers user = users.get(0);
+		ManageUsers user = users.get(0);
 
-        // 3️⃣ Create upload directory if not exists
-        if (!Files.exists(uploadDir)) {
-            Files.createDirectories(uploadDir);
-        }
+		// 3️⃣ Create upload directory if not exists
+		if (!Files.exists(uploadDir)) {
+			Files.createDirectories(uploadDir);
+		}
 
-        // 4️⃣ Delete old logo
-        if (user.getCompanylogo() != null && !user.getCompanylogo().isEmpty()) {
+		// 4️⃣ Delete old logo
+		if (user.getCompanylogo() != null && !user.getCompanylogo().isEmpty()) {
 
-            Path oldLogoPath = uploadDir.resolve(user.getCompanylogo()).normalize();
+			Path oldLogoPath = uploadDir.resolve(user.getCompanylogo()).normalize();
 
-            if (Files.exists(oldLogoPath)) {
-                Files.delete(oldLogoPath);
-            }
-        }
+			if (Files.exists(oldLogoPath)) {
+				Files.delete(oldLogoPath);
+			}
+		}
 
-        // 5️⃣ Generate unique filename
-        String originalFileName = file.getOriginalFilename();
-        String extension = "";
+		// 5️⃣ Generate unique filename
+		String originalFileName = file.getOriginalFilename();
+		String extension = "";
 
-        if (originalFileName != null && originalFileName.contains(".")) {
-            extension = originalFileName.substring(originalFileName.lastIndexOf("."));
-        }
+		if (originalFileName != null && originalFileName.contains(".")) {
+			extension = originalFileName.substring(originalFileName.lastIndexOf("."));
+		}
 
-        String filename = UUID.randomUUID().toString() + extension;
+		String filename = UUID.randomUUID().toString() + extension;
 
-        // 6️⃣ Save new file
-        Path filePath = uploadDir.resolve(filename).normalize();
+		// 6️⃣ Save new file
+		Path filePath = uploadDir.resolve(filename).normalize();
 
-        Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+		Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-        // 7️⃣ Update ManageUsers table
-        user.setCompanylogo(filename);
-        manageUsersRepository.save(user);
+		// 7️⃣ Update ManageUsers table
+		user.setCompanylogo(filename);
+		manageUsersRepository.save(user);
 
-        // 8️⃣ Update user_info table
-        User adminUser = userRepository.findById(createdById)
-                .orElseThrow(() -> new RuntimeException("Admin not found in user_info table"));
+		// 8️⃣ Update user_info table
+		User adminUser = userRepository.findById(createdById)
+				.orElseThrow(() -> new RuntimeException("Admin not found in user_info table"));
 
-        adminUser.setCompanylogo(filename);
-        userRepository.save(adminUser);
+		adminUser.setCompanylogo(filename);
+		userRepository.save(adminUser);
 
-        return filename;
-    }
-    
+		return filename;
+	}
+
 }

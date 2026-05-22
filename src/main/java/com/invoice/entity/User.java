@@ -95,23 +95,21 @@ public class User {
 
 	@Column(name = "address")
 	private String address;
-	
+
 	@Column(name = "loginurl")
 	private String loginUrl;
 
 	@Column(name = "businessCountry")
 	private String businessCountry;
-	
-	
+
 	@Column(name = "suite")
 	private String suite;
-	
+
 	@Column(name = "companylogo")
 	private String companylogo;
-	
+
 	@Column(name = "companyDomain")
 	private String companyDomain;
-
 
 	private String fid;
 	private String everifyId;
@@ -122,7 +120,6 @@ public class User {
 	private String designation;
 	private String dateOfIncorporation;
 
-	
 	@OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<BankDetails> bankDetails;
 

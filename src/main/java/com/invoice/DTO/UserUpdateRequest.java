@@ -27,7 +27,6 @@ public class UserUpdateRequest {
 	private String invoicePrefix;
 	private String companyName;
 	private String profilePicPath;
-
 	private String role;
 	private String state;
 	private String country;
@@ -42,7 +41,6 @@ public class UserUpdateRequest {
 	private String suite;
 	private String companylogo;
 	private String companyDomain;
-
 	private String fid;
 	private String everifyId;
 	private String dunsNumber;
@@ -51,7 +49,6 @@ public class UserUpdateRequest {
 	private String signingAuthorityName;
 	private String designation;
 	private String dateOfIncorporation;
-
 	private List<BankDetails> bankDetails;
 
 }
