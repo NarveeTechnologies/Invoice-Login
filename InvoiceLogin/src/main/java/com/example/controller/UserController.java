@@ -1,4 +1,4 @@
-package com.example.controller;
+package com.invoice.controller;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -13,10 +13,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 
-import com.example.DTO.LoginRequest;
-import com.example.commons.RestAPIResponse;
-import com.example.entity.User;
-import com.example.serviceImpl.UserServiceImpl;
+import com.invoice.DTO.LoginRequest;
+import com.invoice.commons.RestAPIResponse;
+import com.invoice.entity.User;
+import com.invoice.serviceImpl.UserServiceImpl;
 
 //@CrossOrigin("*")
 @RestController

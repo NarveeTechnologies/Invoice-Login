@@ -1,10 +1,10 @@
-package com.example.service;
+package com.invoice.service;
 
 
 
 
-import com.example.DTO.LoginRequest;
-import com.example.entity.User;
+import com.invoice.DTO.LoginRequest;
+import com.invoice.entity.User;
 
 
 public interface UserService {

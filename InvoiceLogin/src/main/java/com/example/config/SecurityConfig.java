@@ -1,4 +1,4 @@
-package com.example.config;
+package com.invoice.config;
 import java.util.Arrays;
 
 import org.springframework.context.annotation.Bean;

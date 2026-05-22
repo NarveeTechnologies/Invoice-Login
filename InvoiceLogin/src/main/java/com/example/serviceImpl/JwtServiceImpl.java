@@ -1,11 +1,11 @@
-package com.example.serviceImpl;
+package com.invoice.serviceImpl;
 
 import java.security.Key;
 import java.util.Date;
 
 import org.springframework.stereotype.Service;
 
-import com.example.entity.User;
+import com.invoice.entity.User;
 
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;

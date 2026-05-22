@@ -1,4 +1,4 @@
-package com.example.commons;
+package com.invoice.commons;
 
 import java.time.LocalDateTime;
 

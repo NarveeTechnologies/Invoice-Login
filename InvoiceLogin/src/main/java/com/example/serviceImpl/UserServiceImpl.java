@@ -1,4 +1,4 @@
-package com.example.serviceImpl;
+package com.invoice.serviceImpl;
 
 import java.util.Optional;
 import java.util.Random;
@@ -9,14 +9,14 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 
-import com.example.DTO.LoginRequest;
+import com.invoice.DTO.LoginRequest;
 
-import com.example.entity.OTP;
-import com.example.entity.User;
+import com.invoice.entity.OTP;
+import com.invoice.entity.User;
 
-import com.example.repository.TokenRepository;
-import com.example.repository.UserRepository;
-import com.example.service.UserService;
+import com.invoice.repository.TokenRepository;
+import com.invoice.repository.UserRepository;
+import com.invoice.service.UserService;
 
 import jakarta.mail.internet.MimeMessage;
 import jakarta.transaction.Transactional;
