@@ -15,15 +15,14 @@ import java.util.Set;
 @AllArgsConstructor
 @Builder
 @ToString(exclude = { "roles" })
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
 @Entity
 @Table(name = "privileges")
 public class Privilege {
-
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	@EqualsAndHashCode.Include
+   
+	@EqualsAndHashCode.Include   // ✅ ADD THIS
 	@Column(name = "privilegeid")
 	private Long id;
 

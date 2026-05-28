@@ -1,6 +1,7 @@
 package com.invoice.controller;
 
 import java.io.IOException;
+
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -17,7 +18,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -25,7 +25,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -42,8 +41,10 @@ import com.invoice.entity.Privilege;
 import com.invoice.entity.Role;
 import com.invoice.entity.User;
 import com.invoice.entity.VerifyOtpRequest;
+import com.invoice.exception.BusinessException;
 import com.invoice.repository.CompanyRegistryRepository;
 import com.invoice.repository.ManageUserRepository;
+import com.invoice.repository.PrivilegeRepository;
 import com.invoice.repository.RoleRepository;
 import com.invoice.repository.UserRepository;
 import com.invoice.service.FileStorageService;
@@ -54,9 +55,7 @@ import com.invoice.tenant.SchemaProvisioningService;
 import com.invoice.tenant.TenantContext;
 import com.invoice.utils.JwtUtil;
 
-import jakarta.persistence.Column;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
 
 //@CrossOrigin("*")
 @RestController
@@ -93,129 +92,148 @@ public class UserController {
 
 	@Autowired
 	private CompanyRegistryRepository companyRegistryRepository;
-
+	
+	@Autowired
+	private PrivilegeRepository privilegeRepository;
+	
 	@PostMapping(value = "/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public ResponseEntity<RestAPIResponse> register(@RequestPart("data") String data,
-			@RequestPart(value = "companylogo", required = false) MultipartFile companylogo,
-			HttpServletRequest request) {
+	        @RequestPart(value = "companylogo", required = false) MultipartFile companylogo,
+	        HttpServletRequest request) {
 
-		try {
+	    try {
+	        ObjectMapper objectMapper = new ObjectMapper();
+	        RegisterRequest requestObj = objectMapper.readValue(data, RegisterRequest.class);
 
-			ObjectMapper objectMapper = new ObjectMapper();
-			RegisterRequest requestObj = objectMapper.readValue(data, RegisterRequest.class);
+	        if (requestObj.getEmail() == null || requestObj.getEmail().isBlank()) {
+	            return ResponseEntity.badRequest()
+	                    .body(new RestAPIResponse("failed", "Email is required", null));
+	        }
 
-			if (requestObj.getEmail() == null || requestObj.getEmail().isBlank()) {
-				return ResponseEntity.badRequest().body(new RestAPIResponse("failed", "Email is required", null));
-			}
+	        ManageUsers manageUsers = userServiceImpl.buildManageUsersFromRequest(requestObj);
 
-			ManageUsers manageUsers = userServiceImpl.buildManageUsersFromRequest(requestObj);
+	        if (companylogo != null && !companylogo.isEmpty()) {
+	            String fileName = fileStorageService.saveFile(companylogo);
+	            manageUsers.setCompanylogo(fileName);
+	        }
 
-			if (companylogo != null && !companylogo.isEmpty()) {
+	        ManageUserDTO response = userServiceImpl.registerCompanyUser(manageUsers);
 
-				String fileName = fileStorageService.saveFile(companylogo);
-				manageUsers.setCompanylogo(fileName);
+	        try {
+	            schemaProvisioningService.provisionTenantSchema(response.getCompanyDomain());
+	        } catch (Exception e) {
+	            log.error("Schema provisioning failed for domain {}", response.getCompanyDomain(), e);
+	        }
 
-			}
+	        try {
+	            String schemaName = TenantContext.toSchemaName(response.getCompanyDomain());
+	            String savedLogo = manageUsers.getCompanylogo();
+	            if (!companyRegistryRepository.existsByCompanyDomain(response.getCompanyDomain())) {
+	                companyRegistryRepository.save(new CompanyRegistry(response.getCompanyName(),
+	                        response.getCompanyDomain(), schemaName, response.getEmail(), savedLogo));
+	            }
+	        } catch (Exception e) {
+	            log.error("Company registry save failed for domain {}", response.getCompanyDomain(), e);
+	        }
 
-			ManageUserDTO response = userServiceImpl.registerCompanyUser(manageUsers);
+	        User user = userRepository.findByEmailIgnoreCase(response.getEmail())
+	                .orElseThrow(() -> new RuntimeException("User not found"));
 
-			// Provision a dedicated schema for this company in all services
-			try {
-				schemaProvisioningService.provisionTenantSchema(response.getCompanyDomain());
-			} catch (Exception e) {
-				// Schema provisioning is non-blocking — registration still succeeds
-				log.error("Schema provisioning failed for domain {}", response.getCompanyDomain(), e);
-			}
+	        ManageUsers savedUser = manageUserRepository.findByEmailIgnoreCase(response.getEmail())
+	                .orElseThrow(() -> new RuntimeException("ManageUser not found"));
 
-			// Save company in the global registry
-			try {
-				String schemaName = TenantContext.toSchemaName(response.getCompanyDomain());
-				String savedLogo = manageUsers.getCompanylogo();
-				if (!companyRegistryRepository.existsByCompanyDomain(response.getCompanyDomain())) {
-					companyRegistryRepository.save(new CompanyRegistry(response.getCompanyName(),
-							response.getCompanyDomain(), schemaName, response.getEmail(), savedLogo));
-				}
-			} catch (Exception e) {
-				log.error("Company registry save failed for domain {}", response.getCompanyDomain(), e);
-			}
+	        Long roleId = savedUser.getRole().getRoleId();
+	        String roleName = null;
+	        Set<String> privilegeNames = new HashSet<>();
 
-			User user = userRepository.findByEmailIgnoreCase(response.getEmail())
-					.orElseThrow(() -> new RuntimeException("User not found"));
+	        // ✅ Use JOIN FETCH to load all privileges eagerly — avoids stale cache issue
+	        if (roleId != null) {
+	        	Role roleEntity = roleRepository.findByIdWithPrivileges(roleId).orElse(null);
+	        	if (roleEntity != null) {
+	        	    roleName = roleEntity.getRoleName();
+	        	    privilegeNames = roleEntity.getPrivileges()
+	        	            .stream()
+	        	            .map(Privilege::getName)
+	        	            .collect(Collectors.toSet());
+	        	}
+	        }
 
-			ManageUsers savedUser = manageUserRepository.findByEmailIgnoreCase(response.getEmail())
-					.orElseThrow(() -> new RuntimeException("ManageUser not found"));
-			Long roleId = savedUser.getRole().getRoleId();
-			String roleName = null;
+	        String token = jwtService.generateToken(user, roleName, privilegeNames);
 
-			Set<String> privilegeNames = new HashSet<>();
+	        String baseUrl = request.getScheme() + "://" + request.getServerName()
+	                + ":" + request.getServerPort();
 
-			if (roleId != null) {
+	        String logoUrl = null;
+	        if (savedUser.getCompanylogo() != null) {
+	            logoUrl = baseUrl + "/uploads/" + savedUser.getCompanylogo();
+	        }
 
-				Role roleEntity = roleRepository.findById(roleId).orElse(null);
+	        Map<String, Object> finalResponse = new LinkedHashMap<>();
+	        finalResponse.put("id", savedUser.getId());
+	        finalResponse.put("fullName", savedUser.getFullName());
+	        finalResponse.put("firstName", savedUser.getFirstName());
+	        finalResponse.put("middleName", savedUser.getMiddleName());
+	        finalResponse.put("lastName", savedUser.getLastName());
+	        finalResponse.put("email", savedUser.getEmail());
+	        finalResponse.put("mobileNumber", savedUser.getMobileNumber());
+	        finalResponse.put("companyName", savedUser.getCompanyName());
+	        finalResponse.put("state", savedUser.getState());
+	        finalResponse.put("city", savedUser.getCity());
+	        finalResponse.put("country", savedUser.getCountry());
+	        finalResponse.put("pincode", savedUser.getPincode());
+	        finalResponse.put("telephone", savedUser.getTelephone());
+	        finalResponse.put("ein", savedUser.getEin());
+	        finalResponse.put("gstin", savedUser.getGstin());
+	        finalResponse.put("website", savedUser.getWebsite());
+	        finalResponse.put("address", savedUser.getAddress());
+	        finalResponse.put("loginurl", savedUser.getLoginUrl());
+	        finalResponse.put("businessCountry", savedUser.getBusinessCountry());
+	        finalResponse.put("suite", savedUser.getSuite());
+	        finalResponse.put("roleName", roleName);
+	        finalResponse.put("privileges", privilegeNames);
+	        finalResponse.put("companylogo", logoUrl);
+	        finalResponse.put("adminId", savedUser.getAdminId());
+	        finalResponse.put("companydomain", savedUser.getCompanyDomain());
+	        finalResponse.put("token", token);
 
-				if (roleEntity != null) {
+	        return ResponseEntity.status(HttpStatus.CREATED).body(
+	                new RestAPIResponse("success", "Company registered successfully. ADMIN created.",
+	                        finalResponse));
 
-					roleName = roleEntity.getRoleName(); // keep for further use
+	    } catch (DataIntegrityViolationException e) {
+	        String errorMsg;
+	        String rootMsg = e.getMostSpecificCause().getMessage();
 
-					if (roleEntity.getPrivileges() != null) {
-						privilegeNames = roleEntity.getPrivileges().stream().map(Privilege::getName)
-								.collect(Collectors.toSet());
-					}
-				}
-			}
+	        if (rootMsg != null && rootMsg.contains("duplicate key")) {
+	            if (rootMsg.contains("manage_users_email_key") || rootMsg.contains("email")) {
+	                errorMsg = "Email already registered. Please use a different email.";
+	            } else if (rootMsg.contains("roles_pkey")) {
+	                errorMsg = "Role creation failed due to sequence conflict. Please try again.";
+	            } else if (rootMsg.contains("unique constraint")) {
+	                errorMsg = "Duplicate entry detected. Record already exists.";
+	            } else {
+	                errorMsg = "Duplicate entry detected. Please check your input.";
+	            }
+	        } else if (rootMsg != null && rootMsg.contains("foreign key")) {
+	            errorMsg = "Invalid reference. Related record not found.";
+	        } else if (rootMsg != null && rootMsg.contains("not-null")) {
+	            errorMsg = "Required field is missing. Please fill all mandatory fields.";
+	        } else {
+	            errorMsg = "Data integrity error. Please check your input.";
+	        }
 
-			String token = jwtService.generateToken(user, roleName, privilegeNames);
+	        return ResponseEntity.status(HttpStatus.CONFLICT)
+	                .body(new RestAPIResponse("failed", errorMsg, null));
 
-			String baseUrl = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
+	    } catch (BusinessException e) {
+	        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+	                .body(new RestAPIResponse("failed", e.getMessage(), null));
 
-			String logoUrl = null;
-
-			if (savedUser.getCompanylogo() != null) {
-				logoUrl = baseUrl + "/uploads/" + savedUser.getCompanylogo();
-			}
-
-			Map<String, Object> finalResponse = new LinkedHashMap<>();
-
-			finalResponse.put("id", savedUser.getId());
-			finalResponse.put("fullName", savedUser.getFullName());
-			finalResponse.put("firstName", savedUser.getFirstName());
-			finalResponse.put("middleName", savedUser.getMiddleName());
-			finalResponse.put("lastName", savedUser.getLastName());
-			finalResponse.put("email", savedUser.getEmail());
-			finalResponse.put("mobileNumber", savedUser.getMobileNumber());
-			finalResponse.put("companyName", savedUser.getCompanyName());
-			finalResponse.put("state", savedUser.getState());
-			finalResponse.put("city", savedUser.getCity());
-			finalResponse.put("country", savedUser.getCountry());
-			finalResponse.put("pincode", savedUser.getPincode());
-			finalResponse.put("telephone", savedUser.getTelephone());
-			finalResponse.put("ein", savedUser.getEin());
-			finalResponse.put("gstin", savedUser.getGstin());
-			finalResponse.put("website", savedUser.getWebsite());
-			finalResponse.put("address", savedUser.getAddress());
-			finalResponse.put("loginurl", savedUser.getLoginUrl());
-			finalResponse.put("businessCountry", savedUser.getBusinessCountry());
-			finalResponse.put("suite", savedUser.getSuite());
-			finalResponse.put("roleName", roleName);
-			finalResponse.put("privileges", privilegeNames);
-			finalResponse.put("companylogo", logoUrl);
-			finalResponse.put("adminId", savedUser.getAdminId());
-			finalResponse.put("companydomain", savedUser.getCompanyDomain());
-			finalResponse.put("token", token);
-
-			return ResponseEntity.status(HttpStatus.CREATED).body(
-					new RestAPIResponse("success", "Company registered successfully. ADMIN created.", finalResponse));
-
-		} catch (DataIntegrityViolationException e) {
-			return ResponseEntity.status(HttpStatus.CONFLICT)
-					.body(new RestAPIResponse("failed", e.getMostSpecificCause().getMessage(), null));
-		} catch (Exception e) {
-
-			log.error("Registration failed", e);
-
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-					.body(new RestAPIResponse("failed", "Registration failed: " + e.getMessage(), null));
-		}
+	    } catch (Exception e) {
+	        log.error("Registration failed", e);
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+	                .body(new RestAPIResponse("failed", "Registration failed: " + e.getMessage(), null));
+	    }
 	}
 
 	/** Send OTP */

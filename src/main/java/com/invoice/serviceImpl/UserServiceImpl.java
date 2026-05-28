@@ -49,12 +49,14 @@ import com.invoice.repository.UserRepository;
 import com.invoice.service.UserService;
 
 import jakarta.mail.internet.MimeMessage;
+import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Slf4j
 public class UserServiceImpl implements UserService {
+
 
 	private final AdminRepository adminRepository;
 
@@ -66,6 +68,9 @@ public class UserServiceImpl implements UserService {
 	@Autowired
 	private JwtServiceImpl jwtServiceImpl;
 
+	@Autowired
+	private EntityManager entityManager;
+	
 	@Autowired
 	private TokenRepository tokenRepository;
 
@@ -83,12 +88,13 @@ public class UserServiceImpl implements UserService {
 
 	@Value("${spring.mail.username}")
 	private String fromEmail;
-
-	UserServiceImpl(MailConfig mailConfig, AdminRepository adminRepository) {
-		this.mailConfig = mailConfig;
-		this.adminRepository = adminRepository;
+	
+	UserServiceImpl(MailConfig mailConfig, AdminRepository adminRepository, EntityManager entityManager) {
+	    this.mailConfig = mailConfig;
+	    this.adminRepository = adminRepository;
+	    this.entityManager = entityManager;
 	}
-
+	
 	private ManageUserDTO convertToDTO(ManageUsers user) {
 		return ManageUserDTO.builder().id(user.getId()).fullName(user.getFullName()).firstName(user.getFirstName())
 				.middleName(user.getMiddleName()).lastName(user.getLastName()).email(user.getEmail())
@@ -119,117 +125,106 @@ public class UserServiceImpl implements UserService {
 	@Transactional
 	public ManageUserDTO registerCompanyUser(ManageUsers manageUsers) {
 
-		final String ADMIN_ROLE = "ADMIN";
+	    final String ADMIN_ROLE = "ADMIN";
 
-		// Preserve incoming values
-		String mobileNumber = manageUsers.getMobileNumber();
-		String companyName = manageUsers.getCompanyName();
-		String state = manageUsers.getState();
-		String country = manageUsers.getCountry();
-		String city = manageUsers.getCity();
-		String pincode = manageUsers.getPincode();
-		String telephone = manageUsers.getTelephone();
-		String ein = manageUsers.getEin();
-		String gstin = manageUsers.getGstin();
-		String website = manageUsers.getWebsite();
-		String address = manageUsers.getAddress();
-		String businessCountry = manageUsers.getBusinessCountry();
-		String companylogo = manageUsers.getCompanylogo();
-		String suite = manageUsers.getSuite();
+	    String mobileNumber = manageUsers.getMobileNumber();
+	    String companyName = manageUsers.getCompanyName();
+	    String state = manageUsers.getState();
+	    String country = manageUsers.getCountry();
+	    String city = manageUsers.getCity();
+	    String pincode = manageUsers.getPincode();
+	    String telephone = manageUsers.getTelephone();
+	    String ein = manageUsers.getEin();
+	    String gstin = manageUsers.getGstin();
+	    String website = manageUsers.getWebsite();
+	    String address = manageUsers.getAddress();
+	    String businessCountry = manageUsers.getBusinessCountry();
+	    String companylogo = manageUsers.getCompanylogo();
+	    String suite = manageUsers.getSuite();
 
-		// 1️⃣ Normalize email
-		if (manageUsers.getEmail() == null || manageUsers.getEmail().isBlank()) {
-			throw new BusinessException("Email is required");
-		}
+	    if (manageUsers.getEmail() == null || manageUsers.getEmail().isBlank()) {
+	        throw new BusinessException("Email is required");
+	    }
 
-		String email = manageUsers.getEmail().trim().toLowerCase();
-		manageUsers.setEmail(email);
-		manageUsers.setPrimaryEmail(email);
+	    String email = manageUsers.getEmail().trim().toLowerCase();
+	    manageUsers.setEmail(email);
+	    manageUsers.setPrimaryEmail(email);
 
-		// 2️⃣ Extract domain
-		String domain = extractDomain(email);
-		manageUsers.setCompanyDomain(domain);
+	    String domain = extractDomain(email);
+	    manageUsers.setCompanyDomain(domain);
 
-		// 3️⃣ Check ADMIN already exists
-		if (manageUserRepository.existsByCompanyDomainAndRole_RoleNameIgnoreCase(domain, ADMIN_ROLE)) {
-			throw new BusinessException("Company already registered. Please contact your company administrator.");
-		}
+	    if (manageUserRepository.existsByCompanyDomainAndRole_RoleNameIgnoreCase(domain, ADMIN_ROLE)) {
+	        throw new BusinessException("Company already registered. Please contact your company administrator.");
+	    }
 
-		// 4️⃣ ✅ CREATE USER FIRST
-		User user = userRepository.findByEmailIgnoreCase(email).orElseGet(() -> {
-			User u = new User();
-			u.setEmail(email);
-			u.setFirstName(manageUsers.getFirstName());
-			u.setCompanyName(companyName);
-			u.setMobileNumber(mobileNumber);
-			u.setState(state);
-			u.setCountry(country);
-			u.setCity(city);
-			u.setPincode(pincode);
-			u.setTelephone(telephone);
-			u.setEin(ein);
-			u.setGstin(gstin);
-			u.setWebsite(website);
-			u.setAddress(address);
-			u.setCompanylogo(companylogo);
-			u.setCompanyDomain(domain);
-			u.setSuite(suite);
-			u.setBusinessCountry(businessCountry);
-			u.setApproved(true);
-			u.setActive(true);
-			return userRepository.save(u); // 🔥 USER SAVED FIRST
-		});
+	    User user = userRepository.findByEmailIgnoreCase(email).orElseGet(() -> {
+	        User u = new User();
+	        u.setEmail(email);
+	        u.setFirstName(manageUsers.getFirstName());
+	        u.setCompanyName(companyName);
+	        u.setMobileNumber(mobileNumber);
+	        u.setState(state);
+	        u.setCountry(country);
+	        u.setCity(city);
+	        u.setPincode(pincode);
+	        u.setTelephone(telephone);
+	        u.setEin(ein);
+	        u.setGstin(gstin);
+	        u.setWebsite(website);
+	        u.setAddress(address);
+	        u.setCompanylogo(companylogo);
+	        u.setCompanyDomain(domain);
+	        u.setSuite(suite);
+	        u.setBusinessCountry(businessCountry);
+	        u.setApproved(true);
+	        u.setActive(true);
+	        return userRepository.save(u);
+	    });
 
-		// 5️⃣ ✅ CREATE ROLE WITH adminId
-		Role adminRole = new Role();
-		adminRole.setRoleName(ADMIN_ROLE);
-		adminRole.setAdminId(user.getId());
-		adminRole.setDescription("Administrator role with full access for company: " + domain);
+	    // ✅ Single Role creation — duplicate block removed
+	    Role adminRole = new Role();
+	    adminRole.setRoleName(ADMIN_ROLE);
+	    adminRole.setAdminId(user.getId());
+	    adminRole.setDescription("Administrator role with full access for company: " + domain);
 
-		// Assign all privileges
-		Set<Privilege> allPrivileges = new HashSet<>(privilegeRepository.findAll());
-		adminRole.setPrivileges(allPrivileges);
+	 // In registerCompanyUser() — no change needed here, same line works
+	    List<Privilege> fetchedPrivileges = privilegeRepository.findAllPrivilegesFresh();    
+	    adminRole.setPrivileges(new HashSet<>(fetchedPrivileges));
+	    Role savedAdminRole = roleRepository.save(adminRole);
 
-		Role savedAdminRole = roleRepository.save(adminRole);
+	    user.setRole(savedAdminRole);
+	    userRepository.save(user);
 
-		// 6️⃣ ✅ ASSIGN ROLE TO USER
-		user.setRole(savedAdminRole);
-		userRepository.save(user);
+	    manageUsers.setAdminId(user.getId());
+	    manageUsers.setRole(savedAdminRole);
+	    manageUsers.setRoleName(savedAdminRole.getRoleName());
 
-		// 7️⃣ Set ManageUsers data
-		manageUsers.setAdminId(user.getId());
-		manageUsers.setRole(savedAdminRole);
-		manageUsers.setRoleName(savedAdminRole.getRoleName());
+	    manageUsers.setMobileNumber(mobileNumber);
+	    manageUsers.setCompanyName(companyName);
+	    manageUsers.setState(state);
+	    manageUsers.setCountry(country);
+	    manageUsers.setCity(city);
+	    manageUsers.setPincode(pincode);
+	    manageUsers.setTelephone(telephone);
+	    manageUsers.setEin(ein);
+	    manageUsers.setGstin(gstin);
+	    manageUsers.setWebsite(website);
+	    manageUsers.setAddress(address);
+	    manageUsers.setCompanylogo(companylogo);
+	    manageUsers.setCompanyDomain(domain);
+	    manageUsers.setSuite(suite);
+	    manageUsers.setBusinessCountry(businessCountry);
 
-		// Restore values
-		manageUsers.setMobileNumber(mobileNumber);
-		manageUsers.setCompanyName(companyName);
-		manageUsers.setState(state);
-		manageUsers.setCountry(country);
-		manageUsers.setCity(city);
-		manageUsers.setPincode(pincode);
-		manageUsers.setTelephone(telephone);
-		manageUsers.setEin(ein);
-		manageUsers.setGstin(gstin);
-		manageUsers.setWebsite(website);
-		manageUsers.setAddress(address);
-		manageUsers.setCompanylogo(companylogo);
-		manageUsers.setCompanyDomain(domain);
-		manageUsers.setSuite(suite);
-		manageUsers.setBusinessCountry(businessCountry);
+	    manageUsers.setApproved(true);
+	    manageUsers.setActive(true);
+	    manageUsers.setAddedByName("SELF-REGISTERED");
+	    manageUsers.setCreatedBy(user);
+	    manageUsers.setAddedBy(user);
 
-		manageUsers.setApproved(true);
-		manageUsers.setActive(true);
+	    ManageUsers saved = manageUserRepository.save(manageUsers);
 
-		manageUsers.setAddedByName("SELF-REGISTERED");
-		manageUsers.setCreatedBy(user);
-		manageUsers.setAddedBy(user);
-
-		ManageUsers saved = manageUserRepository.save(manageUsers);
-
-		return convertToDTO(saved);
+	    return convertToDTO(saved);
 	}
-
 	/** ===================== Register new user ===================== **/
 	@Override
 	public String register(User user) {
@@ -432,79 +427,87 @@ public class UserServiceImpl implements UserService {
 	@Override
 	@Transactional
 	public Map<String, Object> loginWithOtp(LoginRequest request) {
-		String email = request.getEmail().trim().toLowerCase();
-		String enteredOtp = request.getOtp();
+	    String email = request.getEmail().trim().toLowerCase();
+	    String enteredOtp = request.getOtp();
 
-		// Fetch ManageUsers
-		ManageUsers manageUser = manageUserRepository.findByEmailIgnoreCase(email)
-				.orElseThrow(() -> new RuntimeException("Invalid credentials: email not registered"));
+	    // Fetch ManageUsers
+	    ManageUsers manageUser = manageUserRepository.findByEmailIgnoreCase(email)
+	            .orElseThrow(() -> new RuntimeException("Invalid credentials: email not registered"));
 
-		// Validate OTP
-		OTP otpEntity = tokenRepository.findByEmailAndOtp(email, enteredOtp)
-				.orElseThrow(() -> new RuntimeException("Invalid OTP or email"));
-		if (System.currentTimeMillis() > otpEntity.getExpiryTime()) {
-			tokenRepository.deleteByEmail(email);
-			throw new RuntimeException("OTP has expired");
-		}
-		tokenRepository.deleteByEmail(email);
+	    // Validate OTP
+	    OTP otpEntity = tokenRepository.findByEmailAndOtp(email, enteredOtp)
+	            .orElseThrow(() -> new RuntimeException("Invalid OTP or email"));
+	    if (System.currentTimeMillis() > otpEntity.getExpiryTime()) {
+	        tokenRepository.deleteByEmail(email);
+	        throw new RuntimeException("OTP has expired");
+	    }
+	    tokenRepository.deleteByEmail(email);
 
-		// Fetch linked User
-		User user = userRepository.findByEmailIgnoreCase(email)
-				.orElseThrow(() -> new RuntimeException("User not found in system"));
+	    // Fetch linked User
+	    User user = userRepository.findByEmailIgnoreCase(email)
+	            .orElseThrow(() -> new RuntimeException("User not found in system"));
 
-		if (!user.getActive()) {
-			throw new RuntimeException("User is inactive. Contact admin.");
-		}
+	    if (!user.getActive()) {
+	        throw new RuntimeException("User is inactive. Contact admin.");
+	    }
 
-		Long roleId = manageUser.getRole().getRoleId(); // changed from roleName
-		String roleName = null;
-		Set<String> privilegeNames = new HashSet<>();
+	    Long roleId = manageUser.getRole().getRoleId();
+	    String roleName = null;
+	    Set<String> privilegeNames = new HashSet<>();
 
-		if (roleId != null) {
-			Role roleEntity = roleRepository.findById(roleId).orElse(null);
+	    // ✅ FIX 1: fetch privileges directly via PrivilegeRepository
+	    // to avoid Hibernate lazy loading issue
+	    if (roleId != null) {
+	        Role roleEntity = roleRepository.findById(roleId).orElse(null);
 
-			if (roleEntity != null) {
-				roleName = roleEntity.getRoleName(); // still needed for JWT
+	        if (roleEntity != null) {
+	            roleName = roleEntity.getRoleName();
 
-				if (roleEntity.getPrivileges() != null) {
-					privilegeNames = roleEntity.getPrivileges().stream().map(Privilege::getName)
-							.collect(Collectors.toSet());
-				}
-			}
-		}
+	            privilegeNames = privilegeRepository.findByRoles_RoleId(roleId)
+	                    .stream()
+	                    .map(Privilege::getName)
+	                    .collect(Collectors.toSet());
+	        }
+	    }
 
-		// Generate JWT with roleName + privileges
-		String jwtToken = jwtServiceImpl.generateToken(user, roleName, privilegeNames);
+	    // Generate JWT with roleName + privileges
+	    String jwtToken = jwtServiceImpl.generateToken(user, roleName, privilegeNames);
 
-		// Prepare response
-		Map<String, Object> data = new HashMap<>();
-		data.put("token", jwtToken);
-		data.put("userId", manageUser.getId());
-		data.put("email", user.getEmail());
-		data.put("firstName", user.getFirstName());
-		data.put("middleName", user.getMiddleName());
-		data.put("lastName", user.getLastName());
-		data.put("userRole", roleName);
-		data.put("rolePrivileges", privilegeNames);
+	    // Prepare response data
+	    Map<String, Object> data = new HashMap<>();
+	    data.put("token", jwtToken);
+	    data.put("userId", manageUser.getId());
+	    data.put("email", user.getEmail());
+	    data.put("firstName", user.getFirstName());
+	    data.put("middleName", user.getMiddleName());
+	    data.put("lastName", user.getLastName());
+	    data.put("userRole", roleName);
+	    data.put("rolePrivileges", privilegeNames);
 
-		// Admin info
-		User admin = manageUser.getAddedBy();
-		data.put("adminId", admin != null ? admin.getId() : null);
-		data.put("adminName", admin != null ? admin.getFullName() : "SYSTEM");
-		data.put("adminEmail", admin != null ? admin.getEmail() : null);
+	    // Admin info
+	    User admin = manageUser.getAddedBy();
+	    data.put("adminId", admin != null ? admin.getId() : null);
+	    data.put("adminName", admin != null ? admin.getFullName() : "SYSTEM");
+	    data.put("adminEmail", admin != null ? admin.getEmail() : null);
 
-		// Creator info
-		User creator = manageUser.getCreatedBy();
-		if (creator != null) {
-			data.put("createdById", creator.getId());
-			data.put("createdByName", creator.getFullName());
-			data.put("createdByEmail", creator.getEmail());
-		}
+	    // Creator info
+	    User creator = manageUser.getCreatedBy();
+	    if (creator != null) {
+	        data.put("createdById", creator.getId());
+	        data.put("createdByName", creator.getFullName());
+	        data.put("createdByEmail", creator.getEmail());
+	    }
 
-		return Map.of("status", "success", "message", "User logged in successfully", "data", data, "pagesize", 0,
-				"timeStamp", LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy")));
+	    // ✅ FIX 2: replaced Map.of(...) with HashMap to avoid double-wrap
+	    Map<String, Object> response = new HashMap<>();
+	    response.put("status", "success");
+	    response.put("message", "User logged in successfully");
+	    response.put("data", data);
+	    response.put("pagesize", 0);
+	    response.put("timeStamp", LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy")));
+
+	    return response;
 	}
-
 	/** ===================== Other Methods ===================== **/
 	@Override
 	public Optional<User> getUserById(Long id) {
