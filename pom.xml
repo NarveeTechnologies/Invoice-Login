@@ -160,6 +160,7 @@
 	</dependencyManagement>
 
 	<build>
+	 <finalName>invoiceService</finalName>
 		<plugins>
 			<!-- Compiler -->
 			<plugin>
