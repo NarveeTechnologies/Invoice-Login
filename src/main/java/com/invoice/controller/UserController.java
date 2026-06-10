@@ -52,6 +52,7 @@ import com.invoice.service.UserService;
 import com.invoice.serviceImpl.JwtServiceImpl;
 import com.invoice.serviceImpl.UserServiceImpl;
 import com.invoice.tenant.SchemaProvisioningService;
+import com.invoice.tenant.SecurityUtils;
 import com.invoice.tenant.TenantContext;
 import com.invoice.utils.JwtUtil;
 
@@ -158,7 +159,8 @@ public class UserController {
 	        	}
 	        }
 
-	        String token = jwtService.generateToken(user, roleName, privilegeNames);
+	        Long tenantAdminId = savedUser.getAdminId() != null ? savedUser.getAdminId() : user.getId();
+	        String token = jwtService.generateToken(user, tenantAdminId, roleName, privilegeNames);
 
 	        String baseUrl = request.getScheme() + "://" + request.getServerName()
 	                + ":" + request.getServerPort();
@@ -422,12 +424,16 @@ public class UserController {
 	public ResponseEntity<?> updateLogo(@PathVariable Long adminId, @RequestParam("companylogo") MultipartFile file) {
 		try {
 
+			// Enforce tenant isolation: caller must own this adminId
+			SecurityUtils.assertOwnedByCurrentTenant(adminId);
+			Long currentAdminId = SecurityUtils.getCurrentAdminId();
+
 			if (file == null || file.isEmpty()) {
 				return ResponseEntity.badRequest()
 						.body(Map.of("status", "FAILED", "message", "File is empty or not provided"));
 			}
 
-			String filename = fileStorageService.updateLogo(adminId, file);
+			String filename = fileStorageService.updateLogo(currentAdminId, file);
 
 			return ResponseEntity
 					.ok(Map.of("status", "SUCCESS", "message", "Logo updated successfully", "fileName", filename));

@@ -113,6 +113,13 @@ public class ManageUsersServiceImpl implements ManageUserService {
 				.filter(s -> s != null && !s.isBlank()).collect(Collectors.joining(" "));
 	}
 
+	/** Null-safe, trim + case-insensitive equality (treats null and blank as equal). */
+	private static boolean equalsTrimIgnoreCase(String a, String b) {
+		String x = a == null ? "" : a.trim();
+		String y = b == null ? "" : b.trim();
+		return x.equalsIgnoreCase(y);
+	}
+
 	private String extractDomain(String email) {
 		if (email == null || !email.contains("@")) {
 			throw new RuntimeException("Invalid email address");
@@ -149,6 +156,17 @@ public class ManageUsersServiceImpl implements ManageUserService {
 		// ✅ Check for duplicate email in manage_users
 		if (manageUserRepository.existsByEmailIgnoreCase(newUserEmail)) {
 			throw new BusinessException("User with email '" + newUserEmail + "' already exists.");
+		}
+
+		// ✅ Check for duplicate full name (first + last) within the same company.
+		String firstName = manageUsers.getFirstName() != null ? manageUsers.getFirstName().trim() : null;
+		String lastName = manageUsers.getLastName() != null ? manageUsers.getLastName().trim() : null;
+		if (firstName != null && !firstName.isEmpty() && lastName != null && !lastName.isEmpty()
+				&& manageUsers.getAdminId() != null
+				&& manageUserRepository.existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndAdminId(
+						firstName, lastName, manageUsers.getAdminId())) {
+			throw new BusinessException(
+					"A user named '" + firstName + " " + lastName + "' already exists in this company.");
 		}
 
 		// 3️⃣ Check Company Domain
@@ -321,6 +339,8 @@ public class ManageUsersServiceImpl implements ManageUserService {
 				.orElseThrow(() -> new RuntimeException("User not found with ID: " + id));
 
 		String oldFullName = existing.getFullName();
+		String oldFirstName = existing.getFirstName();
+		String oldLastName = existing.getLastName();
 
 		// ---------------- 3️⃣ Handle name updates ----------------
 		if (manageUsers.getFullName() != null && !manageUsers.getFullName().isBlank()) {
@@ -341,6 +361,22 @@ public class ManageUsersServiceImpl implements ManageUserService {
 		}
 
 		existing.setFullName(buildFullName(existing));
+
+		// Prevent renaming to a first+last name already used by ANOTHER user in the same
+		// company. Only enforced when the name actually changes, so editing other fields
+		// of an existing user is never blocked. Uses an exists-query that excludes this
+		// user's own id (safe even if duplicate names already exist in the data).
+		String updFirstName = existing.getFirstName() != null ? existing.getFirstName().trim() : null;
+		String updLastName = existing.getLastName() != null ? existing.getLastName().trim() : null;
+		boolean nameChanged = !equalsTrimIgnoreCase(oldFirstName, updFirstName)
+				|| !equalsTrimIgnoreCase(oldLastName, updLastName);
+		if (nameChanged && updFirstName != null && !updFirstName.isEmpty() && updLastName != null
+				&& !updLastName.isEmpty() && existing.getAdminId() != null
+				&& manageUserRepository.existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndAdminIdAndIdNot(
+						updFirstName, updLastName, existing.getAdminId(), id)) {
+			throw new BusinessException(
+					"A user named '" + updFirstName + " " + updLastName + "' already exists in this company.");
+		}
 
 		// ---------------- 4️⃣ Core fields ----------------
 		if (manageUsers.getEmail() != null && !manageUsers.getEmail().isBlank()) {
@@ -554,6 +590,54 @@ public class ManageUsersServiceImpl implements ManageUserService {
 	/**
 	 * ================= PAGINATION + SEARCH (FIXED ALPHABETICAL) =================
 	 **/
+	@Override
+	public Page<ManageUserDTO> getAllUsersWithPaginationAndSearch(int page, int size, String sortField, String sortDir,
+			String keyword, Long adminId) {
+
+		if (!"asc".equalsIgnoreCase(sortDir) && !"desc".equalsIgnoreCase(sortDir)) {
+			sortDir = "asc";
+		}
+
+		// Map external sortField names to entity fields
+		Map<String, String> sortFieldMap2 = Map.of("id", "id", "firstName", "firstName", "middleName", "middleName",
+				"lastName", "lastName", "fullName", "fullName", "email", "email", "primaryEmail", "primaryEmail",
+				"roleName", "roleName", "addedByName", "addedByName", "updatedByName", "updatedByName");
+
+		String mappedSortField2 = sortFieldMap2.getOrDefault(sortField, "id");
+
+		final String kw = keyword;
+		Specification<ManageUsers> spec = (root, query, cb) -> {
+			List<jakarta.persistence.criteria.Predicate> all = new ArrayList<>();
+			if (adminId != null) {
+				all.add(cb.equal(root.get("adminId"), adminId));
+			}
+			if (kw != null && !kw.trim().isEmpty()) {
+				String like = "%" + kw.trim().toLowerCase() + "%";
+				List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+				predicates.add(cb.like(cb.lower(root.get("firstName")), like));
+				predicates.add(cb.like(cb.lower(root.get("middleName")), like));
+				predicates.add(cb.like(cb.lower(root.get("lastName")), like));
+				predicates.add(cb.like(cb.lower(root.get("fullName")), like));
+				predicates.add(cb.like(cb.lower(root.get("email")), like));
+				predicates.add(cb.like(cb.lower(root.get("primaryEmail")), like));
+				predicates.add(cb.like(cb.lower(root.get("roleName")), like));
+				predicates.add(cb.like(cb.lower(root.get("addedByName")), like));
+				predicates.add(cb.like(cb.lower(root.get("updatedByName")), like));
+				all.add(cb.or(predicates.toArray(new jakarta.persistence.criteria.Predicate[0])));
+			}
+			if (all.isEmpty()) return cb.conjunction();
+			return cb.and(all.toArray(new jakarta.persistence.criteria.Predicate[0]));
+		};
+
+		Sort sortSpec = Sort.by(sortDir.equalsIgnoreCase("desc") ? Sort.Order.desc(mappedSortField2).ignoreCase()
+				: Sort.Order.asc(mappedSortField2).ignoreCase());
+
+		Pageable pageable = PageRequest.of(page, size, sortSpec);
+		Page<ManageUsers> userPage = manageUserRepository.findAll(spec, pageable);
+		List<ManageUserDTO> dtoList = userPage.getContent().stream().map(this::convertToDTO).toList();
+		return new PageImpl<>(dtoList, pageable, userPage.getTotalElements());
+	}
+
 	@Override
 	public Page<ManageUserDTO> getAllUsersWithPaginationAndSearch(int page, int size, String sortField, String sortDir,
 			String keyword) {

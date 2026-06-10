@@ -29,6 +29,7 @@ import com.invoice.commons.RestAPIResponse;
 import com.invoice.entity.Role;
 import com.invoice.serviceImpl.PrivilegeServiceImpl;
 import com.invoice.serviceImpl.RoleServiceImpl;
+import com.invoice.tenant.SecurityUtils;
 import com.invoice.utils.SanitizerUtils;
 
 @RestController
@@ -43,6 +44,7 @@ public class RoleController {
 
 	private static final Logger log = LoggerFactory.getLogger(RoleController.class);
 
+
 	@PostMapping(value = "/save", consumes = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<RestAPIResponse> createRole(@RequestBody RoleDTO roleDTO, Authentication authentication) {
 		try {
@@ -51,10 +53,15 @@ public class RoleController {
 
 			return ResponseEntity.ok(new RestAPIResponse("success", "Role saved successfully", saved));
 
+		} catch (com.invoice.exception.BusinessException e) {
+
+			return ResponseEntity.status(HttpStatus.CONFLICT)
+					.body(new RestAPIResponse("error", e.getMessage(), null));
+
 		} catch (org.springframework.dao.DataIntegrityViolationException e) {
 
-			return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-					.body(new RestAPIResponse("error", "Role already exists for this admin", null));
+			return ResponseEntity.status(HttpStatus.CONFLICT)
+					.body(new RestAPIResponse("error", "Role '" + roleDTO.getRoleName() + "' already exists for this admin", null));
 
 		} catch (RuntimeException e) {
 
@@ -67,7 +74,6 @@ public class RoleController {
 					.body(new RestAPIResponse("error", "Something went wrong", null));
 		}
 	}
-
 	// ✅ Assign privileges category-wise to a role
 	@PostMapping("/privilege/save")
 	public ResponseEntity<RestAPIResponse> assignPrivilegesToRole(@RequestBody Map<String, Object> payload) {
@@ -111,6 +117,10 @@ public class RoleController {
 	public ResponseEntity<RestAPIResponse> searchRoles(@RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "10") int size, @RequestParam(defaultValue = "roleId") String sortBy,
 			@RequestParam(defaultValue = "asc") String sortDir, @RequestParam(required = false) String keyword) {
+
+		if (size > 100) size = 100;
+		if (size < 1) size = 20;
+		if (page < 0) page = 0;
 
 		Page<RoleDTO> result = roleServiceImpl.searchRoles(page, size, sortBy, sortDir,
 				SanitizerUtils.sanitize(keyword));
@@ -162,6 +172,10 @@ public class RoleController {
 			String loggedInEmail = authentication.getName();
 			RoleDTO updated = roleServiceImpl.updateRole(roleId, roleDTO, loggedInEmail);
 			return ResponseEntity.ok(new RestAPIResponse("success", "Role updated successfully", updated));
+		} catch (com.invoice.exception.BusinessException e) {
+			// Duplicate role name on rename.
+			return ResponseEntity.status(HttpStatus.CONFLICT)
+					.body(new RestAPIResponse("error", e.getMessage(), null));
 		} catch (RuntimeException e) {
 			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new RestAPIResponse("error", e.getMessage(), null));
 		} catch (Exception e) {
@@ -199,6 +213,10 @@ public class RoleController {
 		try {
 			roleServiceImpl.deleteRole(roleId);
 			return ResponseEntity.ok(new RestAPIResponse("success", "Role deleted successfully", null));
+		} catch (com.invoice.exception.BusinessException e) {
+			// Role is still assigned to users — a business-rule rejection, not a server error.
+			return ResponseEntity.status(HttpStatus.CONFLICT)
+					.body(new RestAPIResponse("error", e.getMessage(), null));
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body(new RestAPIResponse("error", "Failed to delete role: " + e.getMessage(), null));
@@ -210,7 +228,9 @@ public class RoleController {
 
 		try {
 
-			List<RoleDTO> roles = roleServiceImpl.getRolesByAdminId(adminId);
+			// Ignore the path adminId; use authenticated caller's adminId to prevent cross-tenant reads
+			Long currentAdminId = SecurityUtils.getCurrentAdminId();
+			List<RoleDTO> roles = roleServiceImpl.getRolesByAdminId(currentAdminId);
 
 			return ResponseEntity.ok(new RestAPIResponse("success", "Roles retrieved successfully", roles));
 
@@ -226,6 +246,10 @@ public class RoleController {
 			@RequestParam(defaultValue = "10") int size, @RequestParam(defaultValue = "roleId") String sortBy,
 			@RequestParam(defaultValue = "asc") String sortDir, @RequestParam(required = false) String keyword,
 			Authentication authentication) {
+
+		if (size > 100) size = 100;
+		if (size < 1) size = 20;
+		if (page < 0) page = 0;
 
 		String loggedInEmail = authentication.getName();
 

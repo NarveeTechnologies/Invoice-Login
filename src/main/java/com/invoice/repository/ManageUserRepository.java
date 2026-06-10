@@ -43,6 +43,16 @@ public interface ManageUserRepository extends JpaRepository<ManageUsers, Long>, 
 
 	boolean existsByEmailIgnoreCase(String email);
 
+	// Same first+last name within the same company (adminId scope), case-insensitive.
+	boolean existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndAdminId(String firstName, String lastName,
+			Long adminId);
+
+	// Same as above but excluding a given user id (for the update/edit path). Using a
+	// boolean exists-query (not findBy...Optional) is important: if duplicate names
+	// already exist in the data, an Optional finder throws NonUniqueResultException.
+	boolean existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndAdminIdAndIdNot(String firstName, String lastName,
+			Long adminId, Long id);
+
 	List<ManageUsers> findByAddedBy(User addedBy);
 
 	List<ManageUsers> findByAddedBy_Id(Long addedById);

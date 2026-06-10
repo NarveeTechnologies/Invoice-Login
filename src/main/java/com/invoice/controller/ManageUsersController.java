@@ -34,6 +34,7 @@ import com.invoice.entity.User;
 import com.invoice.repository.ManageUserRepository;
 import com.invoice.repository.UserRepository;
 import com.invoice.service.ManageUserService;
+import com.invoice.tenant.SecurityUtils;
 
 import lombok.RequiredArgsConstructor;
 
@@ -51,12 +52,16 @@ public class ManageUsersController {
 	@Autowired
 	private ManageUserService manageUsersService;
 
-	// 🔹 Create user (accessible by SUPERADMIN or ADMIN)
-	@PreAuthorize("hasAuthority('USER_CREATE')")
+	// 🔹 Create user (accessible by SUPERADMIN or ADMIN, or anyone granted USER_CREATE).
+	// Roles are granted as ROLE_* authorities, so use hasAnyRole (which prepends ROLE_);
+	// hasAuthority('ADMIN') would never match a role-derived authority.
+	@PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN') or hasAuthority('USER_CREATE')")
 	@PostMapping("/manageusers/save")
 	public ResponseEntity<RestAPIResponse> createUser(@RequestBody ManageUsers manageUsers,
 			Authentication authentication) {
 		String loggedInEmail = authentication.getName();
+		// Force tenant scope: ignore body-supplied adminId, always use authenticated caller's
+		manageUsers.setAdminId(SecurityUtils.getCurrentAdminId());
 		ManageUserDTO savedUser = manageUsersService.createUser(manageUsers, loggedInEmail);
 		return ResponseEntity.ok(new RestAPIResponse("Success", "User created successfully", savedUser));
 	}
@@ -90,8 +95,14 @@ public class ManageUsersController {
 			@RequestParam(defaultValue = "id") String sortField, @RequestParam(defaultValue = "asc") String sortDir,
 			@RequestParam(required = false) String keyword) {
 
+		if (size > 100) size = 100;
+		if (size < 1) size = 20;
+		if (page < 0) page = 0;
+
+		// Tenant-scope results to the authenticated caller's adminId
+		Long currentAdminId = SecurityUtils.getCurrentAdminId();
 		Page<ManageUserDTO> userPage = manageUsersService.getAllUsersWithPaginationAndSearch(page, size, sortField,
-				sortDir, keyword);
+				sortDir, keyword, currentAdminId);
 
 		Map<String, Object> response = new HashMap<>();
 		response.put("users", userPage.getContent());

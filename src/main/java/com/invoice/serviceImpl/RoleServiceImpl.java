@@ -25,6 +25,7 @@ import com.invoice.entity.ManageUsers;
 import com.invoice.entity.Privilege;
 import com.invoice.entity.Role;
 import com.invoice.entity.User;
+import com.invoice.exception.BusinessException;
 import com.invoice.repository.ManageUserRepository;
 import com.invoice.repository.PrivilegeRepository;
 import com.invoice.repository.RoleRepository;
@@ -69,7 +70,7 @@ public class RoleServiceImpl implements RoleService {
 				roleDTO.getAdminId());
 
 		if (existingRole.isPresent()) {
-			throw new RuntimeException("Role '" + roleDTO.getRoleName() + "' already exists for this admin");
+			throw new BusinessException("Role '" + roleDTO.getRoleName() + "' already exists for this admin");
 		}
 
 		Role role = convertToEntity(roleDTO);
@@ -94,6 +95,16 @@ public class RoleServiceImpl implements RoleService {
 		// 2️⃣ Fetch existing Role
 		Role existing = roleRepository.findByIdWithPrivileges(roleId)
 				.orElseThrow(() -> new RuntimeException("Role not found"));
+
+		// 2️⃣b Reject renaming to a name already used by ANOTHER role of this admin.
+		// (Edit previously had no duplicate check, so duplicates slipped through.)
+		Long ownerAdminId = existing.getAdminId() != null ? existing.getAdminId() : roleDTO.getAdminId();
+		roleRepository.findByRoleNameIgnoreCaseAndAdminId(roleDTO.getRoleName(), ownerAdminId)
+				.filter(other -> !other.getRoleId().equals(roleId))
+				.ifPresent(other -> {
+					throw new BusinessException(
+							"Role '" + roleDTO.getRoleName() + "' already exists for this admin");
+				});
 
 		// 3️⃣ Update role fields
 		existing.setRoleName(roleDTO.getRoleName());
@@ -193,7 +204,8 @@ public class RoleServiceImpl implements RoleService {
 
 		long assignedCount = userRepository.countByRole_RoleId(roleId);
 		if (assignedCount > 0) {
-			throw new RuntimeException("Cannot delete role — it is still assigned to " + assignedCount + " user(s).");
+			throw new BusinessException("The '" + role.getRoleName() + "' role is assigned to " + assignedCount
+					+ " user(s) and cannot be deleted. Reassign or remove those users first.");
 		}
 
 		// Remove privileges association before deleting

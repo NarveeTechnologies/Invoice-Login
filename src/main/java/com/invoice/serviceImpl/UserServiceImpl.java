@@ -151,6 +151,15 @@ public class UserServiceImpl implements UserService {
 	    manageUsers.setPrimaryEmail(email);
 
 	    String domain = extractDomain(email);
+	    String domainLower = domain == null ? null : domain.toLowerCase();
+	    java.util.Set<String> freeEmailDomains = java.util.Set.of(
+	        "gmail.com", "yahoo.com", "outlook.com", "hotmail.com",
+	        "live.com", "icloud.com", "aol.com", "protonmail.com");
+	    if (domainLower != null && freeEmailDomains.contains(domainLower)) {
+	        throw new RuntimeException(
+	            "Free-email domains are not allowed as company tenant keys. " +
+	            "Register with a company email (e.g. you@yourcompany.com) instead of " + domainLower + ".");
+	    }
 	    manageUsers.setCompanyDomain(domain);
 
 	    if (manageUserRepository.existsByCompanyDomainAndRole_RoleNameIgnoreCase(domain, ADMIN_ROLE)) {
@@ -470,8 +479,12 @@ public class UserServiceImpl implements UserService {
 	        }
 	    }
 
-	    // Generate JWT with roleName + privileges
-	    String jwtToken = jwtServiceImpl.generateToken(user, roleName, privilegeNames);
+	    // Tenant boundary: adminId from the ManageUsers record (set at registration to the
+	    // owning admin's user_info.id). Required for every downstream service to scope data.
+	    Long tenantAdminId = manageUser.getAdminId() != null ? manageUser.getAdminId() : user.getId();
+
+	    // Generate JWT with adminId + roleName + privileges
+	    String jwtToken = jwtServiceImpl.generateToken(user, tenantAdminId, roleName, privilegeNames);
 
 	    // Prepare response data
 	    Map<String, Object> data = new HashMap<>();
