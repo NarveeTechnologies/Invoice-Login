@@ -42,6 +42,14 @@ public class PrivilegeServiceImpl implements PrivilegeService {
 		Privilege privilege = Privilege.builder().name(dto.getName()).cardType(dto.getCardType())
 				.status(dto.getStatus()).category(dto.getCategory()).build();
 		Privilege saved = privilegeRepository.save(privilege);
+
+		// Auto-assign the new privilege to every Admin role across all tenants
+		List<Role> adminRoles = roleRepository.findAllByRoleNameIgnoreCase("Admin");
+		for (Role role : adminRoles) {
+			role.getPrivileges().add(saved);
+			roleRepository.save(role);
+		}
+
 		return convertToDTO(saved);
 	}
 
