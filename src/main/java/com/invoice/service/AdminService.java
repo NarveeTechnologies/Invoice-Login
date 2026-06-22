@@ -16,4 +16,10 @@ public interface AdminService {
 	public Admin updateProfile(Long id, Admin updatedAdmin);
 
 	public boolean deleteProfile(Long id);
+
+	public Admin getSettings(Long adminId);
+
+	public Admin updateSettings(Long adminId, Admin settings);
+
+	public void resetSettings(Long adminId);
 }
