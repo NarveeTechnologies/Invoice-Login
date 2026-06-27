@@ -88,6 +88,7 @@ public class AdminServiceImpl implements AdminService {
 		Admin admin = findAdminProfile(adminId).orElseGet(() -> {
 			Admin a = new Admin();
 			a.setPrimaryEmail(email);
+			a.setAdminId(adminId);
 			return a;
 		});
 		if (settings.getTimezone() != null) admin.setTimezone(settings.getTimezone());
@@ -102,6 +103,8 @@ public class AdminServiceImpl implements AdminService {
 		if (settings.getEmailReminders() != null) admin.setEmailReminders(settings.getEmailReminders());
 		if (settings.getOverdueAlerts() != null) admin.setOverdueAlerts(settings.getOverdueAlerts());
 		if (settings.getReminderDaysBefore() != null) admin.setReminderDaysBefore(settings.getReminderDaysBefore());
+		if (settings.getSchedulerDay() != null) admin.setSchedulerDay(settings.getSchedulerDay());
+		if (settings.getSchedulerTime() != null) admin.setSchedulerTime(settings.getSchedulerTime());
 		if (settings.getCcAdminEmail() != null) admin.setCcAdminEmail(settings.getCcAdminEmail());
 		if (settings.getCcHrEmail() != null) admin.setCcHrEmail(settings.getCcHrEmail());
 		if (settings.getCcAccountsEmail() != null) admin.setCcAccountsEmail(settings.getCcAccountsEmail());

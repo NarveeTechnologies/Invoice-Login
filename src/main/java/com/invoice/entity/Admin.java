@@ -35,6 +35,7 @@ public class Admin {
 	private String businessId;
 	private String prefferedCurrency;
 	private String invoicePrefix;
+	private Long AdminId;
 
 	// General / Company settings
 	private String timezone;
@@ -55,6 +56,8 @@ public class Admin {
 	private Boolean emailReminders;
 	private Boolean overdueAlerts;
 	private Integer reminderDaysBefore;
+	private String schedulerDay;
+	private String schedulerTime;
 
 	// CC email addresses for outgoing invoice emails
 	private String ccAdminEmail;
@@ -68,5 +71,7 @@ public class Admin {
 	// Appearance settings
 	private Integer defaultItemsPerPage;
 	private String defaultExportFormat;
+	
+	
 
 }
