@@ -33,12 +33,44 @@ public class PrivilegeController {
 	// ✅ Create Privilege (using DTO)
 	@PostMapping("/save")
 	public ResponseEntity<RestAPIResponse> createPrivilege(@RequestBody PrivilegeDTO privilegeDTO) {
+
 		try {
+
+			// Validate privilege name
+			if (privilegeDTO.getName() == null || privilegeDTO.getName().trim().isEmpty()) {
+
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+						.body(new RestAPIResponse("error", "Privilege name is required", null));
+			}
+
 			PrivilegeDTO saved = privilegeServiceImpl.createPrivilege(privilegeDTO);
+
 			return ResponseEntity.ok(new RestAPIResponse("success", "Privilege saved successfully", saved));
+
+		} catch (DataIntegrityViolationException e) {
+
+			String errorMessage = e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage()
+					: e.getMessage();
+
+			// Duplicate key / primary key error
+			if (errorMessage != null && errorMessage.toLowerCase().contains("duplicate key")) {
+
+				return ResponseEntity.status(HttpStatus.CONFLICT)
+						.body(new RestAPIResponse("error", "Privilege already exists. Duplicate entry found.", null));
+			}
+
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+					.body(new RestAPIResponse("error", "Database validation failed", null));
+
+		} catch (IllegalArgumentException e) {
+
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+					.body(new RestAPIResponse("error", e.getMessage(), null));
+
 		} catch (Exception e) {
+
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-					.body(new RestAPIResponse("error", "Failed to save privilege: " + e.getMessage(), null));
+					.body(new RestAPIResponse("error", "Unable to save privilege. Please try again later.", null));
 		}
 	}
 
@@ -106,7 +138,9 @@ public class PrivilegeController {
 	}
 
 	@DeleteMapping("/{id}")
-	@PreAuthorize("hasAnyAuthority('ADMIN', 'SUPERADMIN')")
+	// Roles are granted as ROLE_* authorities (see JwtAuthFilter), so use hasAnyRole
+	// (which prepends ROLE_) — hasAnyAuthority('ADMIN') would never match a role.
+	@PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
 	public ResponseEntity<RestAPIResponse> deletePrivilegesByCategoryId(@PathVariable Long id) {
 		try {
 			privilegeServiceImpl.deletePrivilegesByCategoryId(id);

@@ -41,6 +41,10 @@ public interface ManageUserService {
 	public Page<ManageUserDTO> getAllUsersWithPaginationAndSearch(int page, int size, String sortField, String sortDir,
 			String keyword);
 
+	// Pagination + Search scoped to a specific tenant adminId
+	public Page<ManageUserDTO> getAllUsersWithPaginationAndSearch(int page, int size, String sortField, String sortDir,
+			String keyword, Long adminId);
+
 	// Update user profile
 	User updateUserProfile(UserUpdateRequest request, MultipartFile profileImage, String loggedInEmail);
 

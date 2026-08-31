@@ -3,6 +3,7 @@ package com.invoice.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import com.invoice.entity.CompanyRegistry;
@@ -45,6 +46,7 @@ public class CompanyRegistryController {
 	 * whenever new tables are added to a source schema — it will add the missing
 	 * tables to the tenant schema (IF NOT EXISTS).
 	 */
+	@PreAuthorize("hasRole('ADMIN') or hasAuthority('COMPANY_ADMIN')")
 	@PostMapping("/{domain}/reprovision")
 	public ResponseEntity<String> reprovision(@PathVariable("domain") String domain) {
 		return companyRegistryRepository.findByCompanyDomain(domain).map(company -> {
@@ -63,6 +65,7 @@ public class CompanyRegistryController {
 	 * entity tables to any service — all tenant schemas will be updated
 	 * automatically.
 	 */
+	@PreAuthorize("hasRole('ADMIN') or hasAuthority('COMPANY_ADMIN')")
 	@PostMapping("/reprovision-all")
 	public ResponseEntity<String> reprovisionAll() {
 		List<CompanyRegistry> companies = companyRegistryRepository.findAll();
@@ -80,6 +83,7 @@ public class CompanyRegistryController {
 	}
 
 	/** Deactivate a company */
+	@PreAuthorize("hasRole('ADMIN') or hasAuthority('COMPANY_ADMIN')")
 	@PutMapping("/{domain}/deactivate")
 	public ResponseEntity<String> deactivate(@PathVariable("domain") String domain) {
 		return companyRegistryRepository.findByCompanyDomain(domain).map(c -> {

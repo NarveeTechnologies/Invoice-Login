@@ -67,8 +67,10 @@ public class Role {
 	@PrePersist
 	public void onCreate() {
 		this.createdDate = LocalDateTime.now();
-		if (this.status == null)
-			this.status = "Active";
+		// The DB enforces ck_roles_status CHECK (status IN ('ACTIVE','INACTIVE')).
+		// Normalize so a null/blank or mixed-case value (e.g. "Active") cannot
+		// violate the constraint and get mis-reported as "Role already exists".
+		this.status = normalizeStatus(this.status);
 
 		if (this.roleName == null || this.roleName.isBlank()) {
 			throw new IllegalStateException("roleName cannot be null or blank!");
@@ -78,5 +80,15 @@ public class Role {
 	@PreUpdate
 	public void onUpdate() {
 		this.updatedDate = LocalDateTime.now();
+		this.status = normalizeStatus(this.status);
+	}
+
+	/** Coerce status to the only values the DB check constraint accepts. */
+	private static String normalizeStatus(String status) {
+		if (status == null || status.isBlank()) {
+			return "ACTIVE";
+		}
+		String upper = status.trim().toUpperCase();
+		return upper.equals("INACTIVE") ? "INACTIVE" : "ACTIVE";
 	}
 }

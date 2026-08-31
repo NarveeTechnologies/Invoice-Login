@@ -3,18 +3,21 @@ package com.invoice.controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import com.invoice.commons.RestAPIResponse;
 import com.invoice.entity.Admin;
 import com.invoice.entity.User;
 import com.invoice.serviceImpl.AdminServiceImpl;
+import com.invoice.tenant.SecurityUtils;
 
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestController
 @RequestMapping("/auth")
+@PreAuthorize("isAuthenticated()")
 public class AdminController {
 
 	@Autowired
@@ -23,6 +26,8 @@ public class AdminController {
 	@PostMapping("/updated/save")
 	public ResponseEntity<RestAPIResponse> saveUpdatedProfile(@RequestBody Admin admin) {
 		try {
+			// Ensure an authenticated tenant is present; service layer scopes by tenant
+			SecurityUtils.getCurrentAdminId();
 			Admin savedAdmin = adminServiceImpl.saveProfile(admin);
 			return new ResponseEntity<>(new RestAPIResponse("Success", "Profile saved successfully", savedAdmin),
 					HttpStatus.OK);
@@ -35,6 +40,8 @@ public class AdminController {
 	@GetMapping("/updated/getall")
 	public ResponseEntity<RestAPIResponse> getAll() {
 		try {
+			// Touch SecurityUtils so a misconfigured filter chain fails fast
+			SecurityUtils.getCurrentAdminId();
 			return new ResponseEntity<>(
 					new RestAPIResponse("Success", "All profiles retrieved successfully", adminServiceImpl.getAll()),
 					HttpStatus.OK);
@@ -47,7 +54,11 @@ public class AdminController {
 	@GetMapping("/updated/{id}")
 	public ResponseEntity<RestAPIResponse> getProfile(@PathVariable Long id) {
 
-		User admin = adminServiceImpl.getById(id);
+		// Tenant-scope: caller can only fetch their own admin profile
+		Long currentAdminId = SecurityUtils.getCurrentAdminId();
+		SecurityUtils.assertOwnedByCurrentTenant(id);
+
+		User admin = adminServiceImpl.getById(currentAdminId);
 		if (admin == null) {
 			return new ResponseEntity<>(new RestAPIResponse("Fail", "Profile not found with ID: " + id, null),
 					HttpStatus.NOT_FOUND);
@@ -59,7 +70,11 @@ public class AdminController {
 	@PutMapping("/updated/{id}")
 	public ResponseEntity<RestAPIResponse> updatedProfile(@PathVariable Long id, @RequestBody Admin admin) {
 		try {
-			Admin updatedAdmin = adminServiceImpl.updateProfile(id, admin);
+			// Tenant-scope: caller can only update their own admin profile
+			Long currentAdminId = SecurityUtils.getCurrentAdminId();
+			SecurityUtils.assertOwnedByCurrentTenant(id);
+
+			Admin updatedAdmin = adminServiceImpl.updateProfile(currentAdminId, admin);
 			log.error("{}", admin);
 			if (updatedAdmin == null) {
 				log.error("{}", updatedAdmin);
@@ -74,10 +89,50 @@ public class AdminController {
 		}
 	}
 
+	@GetMapping("/settings")
+	public ResponseEntity<RestAPIResponse> getSettings() {
+		try {
+			Long adminId = SecurityUtils.getCurrentAdminId();
+			Admin settings = adminServiceImpl.getSettings(adminId);
+			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings retrieved", settings), HttpStatus.OK);
+		} catch (Exception e) {
+			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@PutMapping("/settings")
+	public ResponseEntity<RestAPIResponse> updateSettings(@RequestBody Admin settings) {
+		try {
+			Long adminId = SecurityUtils.getCurrentAdminId();
+			Admin updated = adminServiceImpl.updateSettings(adminId, settings);
+			if (updated == null) {
+				return new ResponseEntity<>(new RestAPIResponse("Fail", "Settings not found", null), HttpStatus.NOT_FOUND);
+			}
+			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings updated", updated), HttpStatus.OK);
+		} catch (Exception e) {
+			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@DeleteMapping("/settings/reset")
+	public ResponseEntity<RestAPIResponse> resetSettings() {
+		try {
+			Long adminId = SecurityUtils.getCurrentAdminId();
+			adminServiceImpl.resetSettings(adminId);
+			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings reset to defaults", null), HttpStatus.OK);
+		} catch (Exception e) {
+			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
 	@DeleteMapping("/deleted/{id}")
 	public ResponseEntity<RestAPIResponse> deleteUpdatedProfile(@PathVariable Long id) {
 		try {
-			boolean deleted = adminServiceImpl.deleteProfile(id);
+			// Tenant-scope: caller can only delete their own admin profile
+			Long currentAdminId = SecurityUtils.getCurrentAdminId();
+			SecurityUtils.assertOwnedByCurrentTenant(id);
+
+			boolean deleted = adminServiceImpl.deleteProfile(currentAdminId);
 			if (!deleted) {
 				return new ResponseEntity<>(new RestAPIResponse("Fail", "Profile not found with ID: " + id, null),
 						HttpStatus.NOT_FOUND);
