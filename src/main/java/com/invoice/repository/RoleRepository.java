@@ -46,6 +46,8 @@ public interface RoleRepository extends JpaRepository<Role, Long> {
 
 	Optional<Role> findByRoleNameIgnoreCaseAndAdminId(String roleName, Long adminId);
 
+	List<Role> findAllByRoleNameIgnoreCase(String roleName);
+
 	public List<Role> findByAdminId(Long adminId);
 
 	Page<Role> findByAdminId(Long adminId, Pageable pageable);

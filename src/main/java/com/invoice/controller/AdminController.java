@@ -89,6 +89,42 @@ public class AdminController {
 		}
 	}
 
+	@GetMapping("/settings")
+	public ResponseEntity<RestAPIResponse> getSettings() {
+		try {
+			Long adminId = SecurityUtils.getCurrentAdminId();
+			Admin settings = adminServiceImpl.getSettings(adminId);
+			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings retrieved", settings), HttpStatus.OK);
+		} catch (Exception e) {
+			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@PutMapping("/settings")
+	public ResponseEntity<RestAPIResponse> updateSettings(@RequestBody Admin settings) {
+		try {
+			Long adminId = SecurityUtils.getCurrentAdminId();
+			Admin updated = adminServiceImpl.updateSettings(adminId, settings);
+			if (updated == null) {
+				return new ResponseEntity<>(new RestAPIResponse("Fail", "Settings not found", null), HttpStatus.NOT_FOUND);
+			}
+			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings updated", updated), HttpStatus.OK);
+		} catch (Exception e) {
+			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@DeleteMapping("/settings/reset")
+	public ResponseEntity<RestAPIResponse> resetSettings() {
+		try {
+			Long adminId = SecurityUtils.getCurrentAdminId();
+			adminServiceImpl.resetSettings(adminId);
+			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings reset to defaults", null), HttpStatus.OK);
+		} catch (Exception e) {
+			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
 	@DeleteMapping("/deleted/{id}")
 	public ResponseEntity<RestAPIResponse> deleteUpdatedProfile(@PathVariable Long id) {
 		try {
