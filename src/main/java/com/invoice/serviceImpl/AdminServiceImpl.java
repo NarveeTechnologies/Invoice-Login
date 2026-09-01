@@ -91,29 +91,52 @@ public class AdminServiceImpl implements AdminService {
 			a.setAdminId(adminId);
 			return a;
 		});
-		if (settings.getTimezone() != null) admin.setTimezone(settings.getTimezone());
-		if (settings.getDateFormat() != null) admin.setDateFormat(settings.getDateFormat());
-		if (settings.getFiscalYearStart() != null) admin.setFiscalYearStart(settings.getFiscalYearStart());
-		if (settings.getInvoiceStartingNumber() != null) admin.setInvoiceStartingNumber(settings.getInvoiceStartingNumber());
-		if (settings.getPaymentTermsDays() != null) admin.setPaymentTermsDays(settings.getPaymentTermsDays());
-		if (settings.getInvoiceNotes() != null) admin.setInvoiceNotes(settings.getInvoiceNotes());
-		if (settings.getInvoiceFooter() != null) admin.setInvoiceFooter(settings.getInvoiceFooter());
-		if (settings.getPeriodFormat() != null) admin.setPeriodFormat(settings.getPeriodFormat());
-		if (settings.getDefaultDescription() != null) admin.setDefaultDescription(settings.getDefaultDescription());
-		if (settings.getEmailReminders() != null) admin.setEmailReminders(settings.getEmailReminders());
-		if (settings.getOverdueAlerts() != null) admin.setOverdueAlerts(settings.getOverdueAlerts());
-		if (settings.getReminderDaysBefore() != null) admin.setReminderDaysBefore(settings.getReminderDaysBefore());
-		if (settings.getSchedulerDay() != null) admin.setSchedulerDay(settings.getSchedulerDay());
-		if (settings.getSchedulerTime() != null) admin.setSchedulerTime(settings.getSchedulerTime());
-		if (settings.getCcAdminEmail() != null) admin.setCcAdminEmail(settings.getCcAdminEmail());
-		if (settings.getCcHrEmail() != null) admin.setCcHrEmail(settings.getCcHrEmail());
-		if (settings.getCcAccountsEmail() != null) admin.setCcAccountsEmail(settings.getCcAccountsEmail());
-		if (settings.getUpcomingDueDays() != null) admin.setUpcomingDueDays(settings.getUpcomingDueDays());
-		if (settings.getDashboardPanelItems() != null) admin.setDashboardPanelItems(settings.getDashboardPanelItems());
-		if (settings.getDefaultItemsPerPage() != null) admin.setDefaultItemsPerPage(settings.getDefaultItemsPerPage());
-		if (settings.getDefaultExportFormat() != null) admin.setDefaultExportFormat(settings.getDefaultExportFormat());
-		if (settings.getPrefferedCurrency() != null) admin.setPrefferedCurrency(settings.getPrefferedCurrency());
-		if (settings.getInvoicePrefix() != null) admin.setInvoicePrefix(settings.getInvoicePrefix());
+		if (settings.getTimezone() != null)
+			admin.setTimezone(settings.getTimezone());
+		if (settings.getDateFormat() != null)
+			admin.setDateFormat(settings.getDateFormat());
+		if (settings.getFiscalYearStart() != null)
+			admin.setFiscalYearStart(settings.getFiscalYearStart());
+		if (settings.getInvoiceStartingNumber() != null)
+			admin.setInvoiceStartingNumber(settings.getInvoiceStartingNumber());
+		if (settings.getPaymentTermsDays() != null)
+			admin.setPaymentTermsDays(settings.getPaymentTermsDays());
+		if (settings.getInvoiceNotes() != null)
+			admin.setInvoiceNotes(settings.getInvoiceNotes());
+		if (settings.getInvoiceFooter() != null)
+			admin.setInvoiceFooter(settings.getInvoiceFooter());
+		if (settings.getPeriodFormat() != null)
+			admin.setPeriodFormat(settings.getPeriodFormat());
+		if (settings.getDefaultDescription() != null)
+			admin.setDefaultDescription(settings.getDefaultDescription());
+		if (settings.getEmailReminders() != null)
+			admin.setEmailReminders(settings.getEmailReminders());
+		if (settings.getOverdueAlerts() != null)
+			admin.setOverdueAlerts(settings.getOverdueAlerts());
+		if (settings.getReminderDaysBefore() != null)
+			admin.setReminderDaysBefore(settings.getReminderDaysBefore());
+		if (settings.getSchedulerDay() != null)
+			admin.setSchedulerDay(settings.getSchedulerDay());
+		if (settings.getSchedulerTime() != null)
+			admin.setSchedulerTime(settings.getSchedulerTime());
+		if (settings.getCcAdminEmail() != null)
+			admin.setCcAdminEmail(settings.getCcAdminEmail());
+		if (settings.getCcHrEmail() != null)
+			admin.setCcHrEmail(settings.getCcHrEmail());
+		if (settings.getCcAccountsEmail() != null)
+			admin.setCcAccountsEmail(settings.getCcAccountsEmail());
+		if (settings.getUpcomingDueDays() != null)
+			admin.setUpcomingDueDays(settings.getUpcomingDueDays());
+		if (settings.getDashboardPanelItems() != null)
+			admin.setDashboardPanelItems(settings.getDashboardPanelItems());
+		if (settings.getDefaultItemsPerPage() != null)
+			admin.setDefaultItemsPerPage(settings.getDefaultItemsPerPage());
+		if (settings.getDefaultExportFormat() != null)
+			admin.setDefaultExportFormat(settings.getDefaultExportFormat());
+		if (settings.getPrefferedCurrency() != null)
+			admin.setPrefferedCurrency(settings.getPrefferedCurrency());
+		if (settings.getInvoicePrefix() != null)
+			admin.setInvoicePrefix(settings.getInvoicePrefix());
 		return adminRepository.save(admin);
 	}
 

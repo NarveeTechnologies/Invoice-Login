@@ -138,7 +138,8 @@ public class PrivilegeController {
 	}
 
 	@DeleteMapping("/{id}")
-	// Roles are granted as ROLE_* authorities (see JwtAuthFilter), so use hasAnyRole
+	// Roles are granted as ROLE_* authorities (see JwtAuthFilter), so use
+	// hasAnyRole
 	// (which prepends ROLE_) — hasAnyAuthority('ADMIN') would never match a role.
 	@PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
 	public ResponseEntity<RestAPIResponse> deletePrivilegesByCategoryId(@PathVariable Long id) {

@@ -20,7 +20,6 @@ public interface UserService {
 	public String register(User user);
 
 	public Map<String, Object> loginWithOtp(LoginRequest request);
-	
 
 	public void sendOtp(String email);// request OTP
 
@@ -28,7 +27,6 @@ public interface UserService {
 
 	public Optional<User> getUserById(Long id);
 
-	
 	public User updateUserProfile(Long id, User updatedProfile);
 
 	Optional<User> getUserByEmail(String email);
@@ -42,6 +40,5 @@ public interface UserService {
 	public void sendOtpForRegister(String emailInput);
 
 	public ManageUserDTO registerCompanyUser(ManageUsers manageUsers);
-	
 
 }

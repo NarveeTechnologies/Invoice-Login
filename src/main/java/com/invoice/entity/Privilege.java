@@ -21,8 +21,8 @@ import java.util.Set;
 public class Privilege {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-   
-	@EqualsAndHashCode.Include   // ✅ ADD THIS
+
+	@EqualsAndHashCode.Include // ✅ ADD THIS
 	@Column(name = "privilegeid")
 	private Long id;
 

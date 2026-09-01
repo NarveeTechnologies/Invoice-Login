@@ -18,10 +18,10 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
- * Login-service is the only service that exposes unauthenticated endpoints (login,
- * register, email-check, OTP). Everything else — profile updates, role admin, manage
- * users — requires a JWT that the {@link JwtAuthFilter} validates and pins to the
- * adminId tenant boundary.
+ * Login-service is the only service that exposes unauthenticated endpoints
+ * (login, register, email-check, OTP). Everything else — profile updates, role
+ * admin, manage users — requires a JWT that the {@link JwtAuthFilter} validates
+ * and pins to the adminId tenant boundary.
  */
 @Configuration
 @EnableMethodSecurity
@@ -43,45 +43,30 @@ public class SecurityConfig {
 
 	@Bean
 	public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-		http
-			.csrf(csrf -> csrf.disable())
-			.cors(cors -> {})
-			.sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-			.authorizeHttpRequests(auth -> auth
-				.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-				.requestMatchers(
-						"/auth/login",
-						"/auth/login/send-otp",
-						"/auth/register",
-						"/auth/register/send-otp",
-						"/auth/login/verify-otp",
-						"/auth/check-email/**",
-						"/auth/check-token",
-						"/auth/validate-token",
-						"/auth/get-registration-token",
-						"/companies",
-						"/companies/active",
-						"/companies/{domain}",
-						"/actuator/health",
-						"/actuator/info"
-				).permitAll()
-				.anyRequest().authenticated())
-			.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-			.formLogin(form -> form.disable())
-			.httpBasic(b -> b.disable());
+		http.csrf(csrf -> csrf.disable()).cors(cors -> {
+		}).sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+				.authorizeHttpRequests(auth -> auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+						.requestMatchers("/auth/login", "/auth/login/send-otp", "/auth/register",
+								"/auth/register/send-otp", "/auth/login/verify-otp", "/auth/check-email/**",
+								"/auth/check-token", "/auth/validate-token", "/auth/get-registration-token",
+								"/companies", "/companies/active", "/companies/{domain}", "/actuator/health",
+								"/actuator/info")
+						.permitAll().anyRequest().authenticated())
+				.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+				.formLogin(form -> form.disable()).httpBasic(b -> b.disable());
 		return http.build();
 	}
 
 	@Bean
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration config = new CorsConfiguration();
-		List<String> origins = Arrays.stream(allowedOrigins.split(","))
-				.map(String::trim).filter(s -> !s.isEmpty()).toList();
+		List<String> origins = Arrays.stream(allowedOrigins.split(",")).map(String::trim).filter(s -> !s.isEmpty())
+				.toList();
 		config.setAllowedOriginPatterns(origins);
 		config.setAllowCredentials(true);
 		config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-		config.setAllowedHeaders(Arrays.asList(
-				"Authorization", "Content-Type", "Accept", "X-Requested-With", "X-Correlation-Id"));
+		config.setAllowedHeaders(
+				Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "X-Correlation-Id"));
 		config.setExposedHeaders(Arrays.asList("Authorization", "Content-Disposition", "X-Correlation-Id"));
 		config.setMaxAge(3600L);
 		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

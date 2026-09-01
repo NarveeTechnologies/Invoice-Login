@@ -71,7 +71,5 @@ public class Admin {
 	// Appearance settings
 	private Integer defaultItemsPerPage;
 	private String defaultExportFormat;
-	
-	
 
 }

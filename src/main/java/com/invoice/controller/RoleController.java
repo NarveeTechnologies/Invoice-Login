@@ -44,7 +44,6 @@ public class RoleController {
 
 	private static final Logger log = LoggerFactory.getLogger(RoleController.class);
 
-
 	@PostMapping(value = "/save", consumes = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<RestAPIResponse> createRole(@RequestBody RoleDTO roleDTO, Authentication authentication) {
 		try {
@@ -55,13 +54,12 @@ public class RoleController {
 
 		} catch (com.invoice.exception.BusinessException e) {
 
-			return ResponseEntity.status(HttpStatus.CONFLICT)
-					.body(new RestAPIResponse("error", e.getMessage(), null));
+			return ResponseEntity.status(HttpStatus.CONFLICT).body(new RestAPIResponse("error", e.getMessage(), null));
 
 		} catch (org.springframework.dao.DataIntegrityViolationException e) {
 
-			return ResponseEntity.status(HttpStatus.CONFLICT)
-					.body(new RestAPIResponse("error", "Role '" + roleDTO.getRoleName() + "' already exists for this admin", null));
+			return ResponseEntity.status(HttpStatus.CONFLICT).body(new RestAPIResponse("error",
+					"Role '" + roleDTO.getRoleName() + "' already exists for this admin", null));
 
 		} catch (RuntimeException e) {
 
@@ -74,6 +72,7 @@ public class RoleController {
 					.body(new RestAPIResponse("error", "Something went wrong", null));
 		}
 	}
+
 	// ✅ Assign privileges category-wise to a role
 	@PostMapping("/privilege/save")
 	public ResponseEntity<RestAPIResponse> assignPrivilegesToRole(@RequestBody Map<String, Object> payload) {
@@ -118,9 +117,12 @@ public class RoleController {
 			@RequestParam(defaultValue = "10") int size, @RequestParam(defaultValue = "roleId") String sortBy,
 			@RequestParam(defaultValue = "asc") String sortDir, @RequestParam(required = false) String keyword) {
 
-		if (size > 100) size = 100;
-		if (size < 1) size = 20;
-		if (page < 0) page = 0;
+		if (size > 100)
+			size = 100;
+		if (size < 1)
+			size = 20;
+		if (page < 0)
+			page = 0;
 
 		Page<RoleDTO> result = roleServiceImpl.searchRoles(page, size, sortBy, sortDir,
 				SanitizerUtils.sanitize(keyword));
@@ -174,8 +176,7 @@ public class RoleController {
 			return ResponseEntity.ok(new RestAPIResponse("success", "Role updated successfully", updated));
 		} catch (com.invoice.exception.BusinessException e) {
 			// Duplicate role name on rename.
-			return ResponseEntity.status(HttpStatus.CONFLICT)
-					.body(new RestAPIResponse("error", e.getMessage(), null));
+			return ResponseEntity.status(HttpStatus.CONFLICT).body(new RestAPIResponse("error", e.getMessage(), null));
 		} catch (RuntimeException e) {
 			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new RestAPIResponse("error", e.getMessage(), null));
 		} catch (Exception e) {
@@ -214,9 +215,9 @@ public class RoleController {
 			roleServiceImpl.deleteRole(roleId);
 			return ResponseEntity.ok(new RestAPIResponse("success", "Role deleted successfully", null));
 		} catch (com.invoice.exception.BusinessException e) {
-			// Role is still assigned to users — a business-rule rejection, not a server error.
-			return ResponseEntity.status(HttpStatus.CONFLICT)
-					.body(new RestAPIResponse("error", e.getMessage(), null));
+			// Role is still assigned to users — a business-rule rejection, not a server
+			// error.
+			return ResponseEntity.status(HttpStatus.CONFLICT).body(new RestAPIResponse("error", e.getMessage(), null));
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body(new RestAPIResponse("error", "Failed to delete role: " + e.getMessage(), null));
@@ -228,7 +229,8 @@ public class RoleController {
 
 		try {
 
-			// Ignore the path adminId; use authenticated caller's adminId to prevent cross-tenant reads
+			// Ignore the path adminId; use authenticated caller's adminId to prevent
+			// cross-tenant reads
 			Long currentAdminId = SecurityUtils.getCurrentAdminId();
 			List<RoleDTO> roles = roleServiceImpl.getRolesByAdminId(currentAdminId);
 
@@ -247,9 +249,12 @@ public class RoleController {
 			@RequestParam(defaultValue = "asc") String sortDir, @RequestParam(required = false) String keyword,
 			Authentication authentication) {
 
-		if (size > 100) size = 100;
-		if (size < 1) size = 20;
-		if (page < 0) page = 0;
+		if (size > 100)
+			size = 100;
+		if (size < 1)
+			size = 20;
+		if (page < 0)
+			page = 0;
 
 		String loggedInEmail = authentication.getName();
 

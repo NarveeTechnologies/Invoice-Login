@@ -38,17 +38,14 @@ public interface PrivilegeRepository extends JpaRepository<Privilege, Long> {
 	@Query("DELETE FROM Privilege p WHERE p.category = :category")
 	void deleteByCategory(@Param("category") String category);
 
-	
 	@Query("SELECT p FROM Privilege p JOIN p.roles r WHERE r.roleId = :roleId")
 	List<Privilege> findByRoles_RoleId(@Param("roleId") Long roleId);
-	
+
 //	@Query("SELECT r FROM Role r LEFT JOIN FETCH r.privileges WHERE r.roleId = :roleId")
 //	Optional<Role> findByIdWithPrivileges(@Param("roleId") Long roleId);
 
 	@QueryHints(@QueryHint(name = org.hibernate.annotations.QueryHints.CACHEABLE, value = "false"))
 	@Query("SELECT p FROM Privilege p")
 	List<Privilege> findAllPrivilegesFresh();
-	
-	
-	
+
 }

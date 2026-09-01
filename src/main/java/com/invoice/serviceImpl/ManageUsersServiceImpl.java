@@ -113,7 +113,9 @@ public class ManageUsersServiceImpl implements ManageUserService {
 				.filter(s -> s != null && !s.isBlank()).collect(Collectors.joining(" "));
 	}
 
-	/** Null-safe, trim + case-insensitive equality (treats null and blank as equal). */
+	/**
+	 * Null-safe, trim + case-insensitive equality (treats null and blank as equal).
+	 */
 	private static boolean equalsTrimIgnoreCase(String a, String b) {
 		String x = a == null ? "" : a.trim();
 		String y = b == null ? "" : b.trim();
@@ -163,8 +165,8 @@ public class ManageUsersServiceImpl implements ManageUserService {
 		String lastName = manageUsers.getLastName() != null ? manageUsers.getLastName().trim() : null;
 		if (firstName != null && !firstName.isEmpty() && lastName != null && !lastName.isEmpty()
 				&& manageUsers.getAdminId() != null
-				&& manageUserRepository.existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndAdminId(
-						firstName, lastName, manageUsers.getAdminId())) {
+				&& manageUserRepository.existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndAdminId(firstName, lastName,
+						manageUsers.getAdminId())) {
 			throw new BusinessException(
 					"A user named '" + firstName + " " + lastName + "' already exists in this company.");
 		}
@@ -362,8 +364,10 @@ public class ManageUsersServiceImpl implements ManageUserService {
 
 		existing.setFullName(buildFullName(existing));
 
-		// Prevent renaming to a first+last name already used by ANOTHER user in the same
-		// company. Only enforced when the name actually changes, so editing other fields
+		// Prevent renaming to a first+last name already used by ANOTHER user in the
+		// same
+		// company. Only enforced when the name actually changes, so editing other
+		// fields
 		// of an existing user is never blocked. Uses an exists-query that excludes this
 		// user's own id (safe even if duplicate names already exist in the data).
 		String updFirstName = existing.getFirstName() != null ? existing.getFirstName().trim() : null;
@@ -372,8 +376,8 @@ public class ManageUsersServiceImpl implements ManageUserService {
 				|| !equalsTrimIgnoreCase(oldLastName, updLastName);
 		if (nameChanged && updFirstName != null && !updFirstName.isEmpty() && updLastName != null
 				&& !updLastName.isEmpty() && existing.getAdminId() != null
-				&& manageUserRepository.existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndAdminIdAndIdNot(
-						updFirstName, updLastName, existing.getAdminId(), id)) {
+				&& manageUserRepository.existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndAdminIdAndIdNot(updFirstName,
+						updLastName, existing.getAdminId(), id)) {
 			throw new BusinessException(
 					"A user named '" + updFirstName + " " + updLastName + "' already exists in this company.");
 		}
@@ -625,7 +629,8 @@ public class ManageUsersServiceImpl implements ManageUserService {
 				predicates.add(cb.like(cb.lower(root.get("updatedByName")), like));
 				all.add(cb.or(predicates.toArray(new jakarta.persistence.criteria.Predicate[0])));
 			}
-			if (all.isEmpty()) return cb.conjunction();
+			if (all.isEmpty())
+				return cb.conjunction();
 			return cb.and(all.toArray(new jakarta.persistence.criteria.Predicate[0]));
 		};
 

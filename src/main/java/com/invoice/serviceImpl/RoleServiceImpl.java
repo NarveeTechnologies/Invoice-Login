@@ -100,10 +100,8 @@ public class RoleServiceImpl implements RoleService {
 		// (Edit previously had no duplicate check, so duplicates slipped through.)
 		Long ownerAdminId = existing.getAdminId() != null ? existing.getAdminId() : roleDTO.getAdminId();
 		roleRepository.findByRoleNameIgnoreCaseAndAdminId(roleDTO.getRoleName(), ownerAdminId)
-				.filter(other -> !other.getRoleId().equals(roleId))
-				.ifPresent(other -> {
-					throw new BusinessException(
-							"Role '" + roleDTO.getRoleName() + "' already exists for this admin");
+				.filter(other -> !other.getRoleId().equals(roleId)).ifPresent(other -> {
+					throw new BusinessException("Role '" + roleDTO.getRoleName() + "' already exists for this admin");
 				});
 
 		// 3️⃣ Update role fields

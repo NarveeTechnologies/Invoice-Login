@@ -18,7 +18,6 @@ public interface ManageUserService {
 	// Create a new ManageUser
 	ManageUserDTO createUser(ManageUsers manageUsers, String loggedInEmail);
 
-	
 	// Update ManageUser
 	ManageUserDTO updateUser(Long id, ManageUsers manageUsers, String loggedInEmail);
 
@@ -55,11 +54,9 @@ public interface ManageUserService {
 
 	User updateUserProfileDynamic(UserUpdateRequest request);
 
-	
 	UserUpdateRequest mapToDto(User user);
 
 	// Bhagi
-	
 
 	/** ================= UPDATE USER PROFILE ================= **/
 
@@ -68,5 +65,5 @@ public interface ManageUserService {
 	Page<ManageUserDTO> getAllManageUsersWithSorting(SortingRequestDTO sortingRequestDTO, String loggedInEmail);
 
 	Optional<ManageUsers> findByAdminId(Long adminId);
-	
+
 }

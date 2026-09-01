@@ -23,9 +23,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * JWT enforcement filter for the Login service. Public endpoints — login, register,
- * OTP, company-registry lookup — bypass auth. Every other request must carry a
- * valid Bearer token whose claims include the {@code adminId} tenant boundary.
+ * JWT enforcement filter for the Login service. Public endpoints — login,
+ * register, OTP, company-registry lookup — bypass auth. Every other request
+ * must carry a valid Bearer token whose claims include the {@code adminId}
+ * tenant boundary.
  */
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -33,20 +34,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 	@Autowired
 	private JwtServiceImpl jwtService;
 
-	private static final String[] PUBLIC_PATHS = {
-			"/auth/login",
-			"/auth/register",
-			"/auth/login/send-otp",
-			"/auth/register/send-otp",
-			"/auth/login/verify-otp",
-			"/auth/check-email/",
-			"/auth/check-token",
-			"/auth/validate-token",
-			"/auth/get-registration-token",
-			"/companies",
-			"/actuator/health",
-			"/actuator/info"
-	};
+	private static final String[] PUBLIC_PATHS = { "/auth/login", "/auth/register", "/auth/login/send-otp",
+			"/auth/register/send-otp", "/auth/login/verify-otp", "/auth/check-email/", "/auth/check-token",
+			"/auth/validate-token", "/auth/get-registration-token", "/companies", "/actuator/health",
+			"/actuator/info" };
 
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -117,9 +108,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 	}
 
 	private Long coerceLong(Object value) {
-		if (value == null) return null;
-		if (value instanceof Number n) return n.longValue();
-		try { return Long.parseLong(value.toString().trim()); } catch (NumberFormatException e) { return null; }
+		if (value == null)
+			return null;
+		if (value instanceof Number n)
+			return n.longValue();
+		try {
+			return Long.parseLong(value.toString().trim());
+		} catch (NumberFormatException e) {
+			return null;
+		}
 	}
 
 	private void sendUnauthorized(HttpServletResponse response, String message) throws IOException {

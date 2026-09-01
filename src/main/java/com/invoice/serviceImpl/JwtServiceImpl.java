@@ -57,8 +57,9 @@ public class JwtServiceImpl {
 	}
 
 	/**
-	 * Backward-compatible overload kept for older call paths. Prefer the adminId-aware
-	 * variant — this one will refuse to issue a token if the user has no tenant context.
+	 * Backward-compatible overload kept for older call paths. Prefer the
+	 * adminId-aware variant — this one will refuse to issue a token if the user has
+	 * no tenant context.
 	 */
 	@Deprecated
 	public String generateToken(User user, String roleName, Set<String> privileges) {

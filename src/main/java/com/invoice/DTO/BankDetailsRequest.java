@@ -15,5 +15,5 @@ public class BankDetailsRequest {
 	private String bankName;
 	private String bankAccountNumber;
 	private String routingNumber;
-	
+
 }

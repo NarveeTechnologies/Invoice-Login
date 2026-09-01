@@ -22,15 +22,12 @@ import jakarta.transaction.Transactional;
 public interface ManageUserRepository extends JpaRepository<ManageUsers, Long>, JpaSpecificationExecutor<ManageUsers> {
 
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
-	@Query("\r\n"
-			+ "			    UPDATE ManageUsers m\r\n"
-			+ "			    SET m.addedByName = :fullName\r\n"
+	@Query("\r\n" + "			    UPDATE ManageUsers m\r\n" + "			    SET m.addedByName = :fullName\r\n"
 			+ "			    WHERE m.addedBy.id = :userId")
 	void updateAddedByName(Long userId, String fullName);
 
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
-	@Query("  UPDATE ManageUsers m\r\n"
-			+ "			    SET m.updatedByName = :fullName\r\n"
+	@Query("  UPDATE ManageUsers m\r\n" + "			    SET m.updatedByName = :fullName\r\n"
 			+ "			    WHERE m.updatedBy = :userId")
 	void updateUpdatedByName(Long userId, String fullName);
 
@@ -43,13 +40,15 @@ public interface ManageUserRepository extends JpaRepository<ManageUsers, Long>, 
 
 	boolean existsByEmailIgnoreCase(String email);
 
-	// Same first+last name within the same company (adminId scope), case-insensitive.
-	boolean existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndAdminId(String firstName, String lastName,
-			Long adminId);
+	// Same first+last name within the same company (adminId scope),
+	// case-insensitive.
+	boolean existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndAdminId(String firstName, String lastName, Long adminId);
 
-	// Same as above but excluding a given user id (for the update/edit path). Using a
+	// Same as above but excluding a given user id (for the update/edit path). Using
+	// a
 	// boolean exists-query (not findBy...Optional) is important: if duplicate names
-	// already exist in the data, an Optional finder throws NonUniqueResultException.
+	// already exist in the data, an Optional finder throws
+	// NonUniqueResultException.
 	boolean existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndAdminIdAndIdNot(String firstName, String lastName,
 			Long adminId, Long id);
 
@@ -92,10 +91,8 @@ public interface ManageUserRepository extends JpaRepository<ManageUsers, Long>, 
 			+ "			          LOWER(m.updatedByName) LIKE LOWER(CONCAT('%', :keyword, '%'))")
 	Page<ManageUsers> search(@Param("keyword") String keyword, Pageable pageable);
 
-	@Query(" SELECT u FROM ManageUsers u\r\n"
-			+ "			    LEFT JOIN FETCH u.role r\r\n"
-			+ "			    WHERE\r\n"
-			+ "			        (:keyword IS NULL OR :keyword = '' OR\r\n"
+	@Query(" SELECT u FROM ManageUsers u\r\n" + "			    LEFT JOIN FETCH u.role r\r\n"
+			+ "			    WHERE\r\n" + "			        (:keyword IS NULL OR :keyword = '' OR\r\n"
 			+ "			         LOWER(u.firstName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
 			+ "			         LOWER(u.middleName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
 			+ "			         LOWER(u.lastName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR\r\n"
@@ -115,54 +112,50 @@ public interface ManageUserRepository extends JpaRepository<ManageUsers, Long>, 
 	boolean existsByCompanyDomainAndRole_RoleNameIgnoreCase(String companyDomain, String roleName);
 
 	boolean existsByCompanyDomainAndRole(String domain, Role adminRole);
-	
+
 	List<ManageUsers> findByCompanyDomainIgnoreCase(String companyDomain);
-	
-    @Query("SELECT m.roleName FROM ManageUsers m WHERE m.id = :id")
-    String getRoleNameById(@Param("id") Long id);
 
-    // ✅ For sorting without keyword - ALL USERS (for SUPERADMIN)
-    Page<ManageUsers> findAll(Pageable pageable);
-    
-    // ✅ For sorting without keyword - FILTERED BY DOMAIN (for ADMIN)
-    @Query("SELECT m FROM ManageUsers m WHERE LOWER(m.companyDomain) = LOWER(:domain)")
-    Page<ManageUsers> getAllManageUsersByDomain(@Param("domain") String domain, Pageable pageable);
-    
-    // ✅ For searching with keyword - ALL USERS (for SUPERADMIN)
-    @Query("SELECT m FROM ManageUsers m WHERE " +
-           "LOWER(COALESCE(m.firstName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.middleName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.lastName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.fullName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.email, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.roleName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.companyName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.mobileNumber, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.addedByName, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))")
-    Page<ManageUsers> searchManageUsers(@Param("keyword") String keyword, Pageable pageable);
-    
-    // ✅ For searching with keyword - FILTERED BY DOMAIN (for ADMIN)
-    @Query("SELECT m FROM ManageUsers m WHERE LOWER(m.companyDomain) = LOWER(:domain) AND (" +
-           "LOWER(COALESCE(m.firstName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.middleName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.lastName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.fullName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.email, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.roleName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.companyName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.mobileNumber, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(COALESCE(m.addedByName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))")
-    Page<ManageUsers> searchManageUsersByDomain(@Param("keyword") String keyword, 
-                                                 @Param("domain") String domain, 
-                                                 Pageable pageable);
-    
-    // ✅ For getting single user's data (for regular users)
-    @Query("SELECT m FROM ManageUsers m WHERE LOWER(m.email) = LOWER(:email)")
-    Page<ManageUsers> getManageUserByEmail(@Param("email") String email, Pageable pageable);
+	@Query("SELECT m.roleName FROM ManageUsers m WHERE m.id = :id")
+	String getRoleNameById(@Param("id") Long id);
 
-    
-    List<ManageUsers> findByCreatedBy_Id(Long createdById);
+	// ✅ For sorting without keyword - ALL USERS (for SUPERADMIN)
+	Page<ManageUsers> findAll(Pageable pageable);
 
+	// ✅ For sorting without keyword - FILTERED BY DOMAIN (for ADMIN)
+	@Query("SELECT m FROM ManageUsers m WHERE LOWER(m.companyDomain) = LOWER(:domain)")
+	Page<ManageUsers> getAllManageUsersByDomain(@Param("domain") String domain, Pageable pageable);
 
+	// ✅ For searching with keyword - ALL USERS (for SUPERADMIN)
+	@Query("SELECT m FROM ManageUsers m WHERE "
+			+ "LOWER(COALESCE(m.firstName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.middleName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.lastName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.fullName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.email, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.roleName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.companyName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.mobileNumber, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.addedByName, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))")
+	Page<ManageUsers> searchManageUsers(@Param("keyword") String keyword, Pageable pageable);
+
+	// ✅ For searching with keyword - FILTERED BY DOMAIN (for ADMIN)
+	@Query("SELECT m FROM ManageUsers m WHERE LOWER(m.companyDomain) = LOWER(:domain) AND ("
+			+ "LOWER(COALESCE(m.firstName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.middleName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.lastName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.fullName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.email, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.roleName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.companyName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.mobileNumber, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) OR "
+			+ "LOWER(COALESCE(m.addedByName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+	Page<ManageUsers> searchManageUsersByDomain(@Param("keyword") String keyword, @Param("domain") String domain,
+			Pageable pageable);
+
+	// ✅ For getting single user's data (for regular users)
+	@Query("SELECT m FROM ManageUsers m WHERE LOWER(m.email) = LOWER(:email)")
+	Page<ManageUsers> getManageUserByEmail(@Param("email") String email, Pageable pageable);
+
+	List<ManageUsers> findByCreatedBy_Id(Long createdById);
 
 }

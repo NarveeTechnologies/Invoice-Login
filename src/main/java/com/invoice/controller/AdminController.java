@@ -96,7 +96,8 @@ public class AdminController {
 			Admin settings = adminServiceImpl.getSettings(adminId);
 			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings retrieved", settings), HttpStatus.OK);
 		} catch (Exception e) {
-			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null),
+					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -106,11 +107,13 @@ public class AdminController {
 			Long adminId = SecurityUtils.getCurrentAdminId();
 			Admin updated = adminServiceImpl.updateSettings(adminId, settings);
 			if (updated == null) {
-				return new ResponseEntity<>(new RestAPIResponse("Fail", "Settings not found", null), HttpStatus.NOT_FOUND);
+				return new ResponseEntity<>(new RestAPIResponse("Fail", "Settings not found", null),
+						HttpStatus.NOT_FOUND);
 			}
 			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings updated", updated), HttpStatus.OK);
 		} catch (Exception e) {
-			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null),
+					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -119,9 +122,11 @@ public class AdminController {
 		try {
 			Long adminId = SecurityUtils.getCurrentAdminId();
 			adminServiceImpl.resetSettings(adminId);
-			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings reset to defaults", null), HttpStatus.OK);
+			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings reset to defaults", null),
+					HttpStatus.OK);
 		} catch (Exception e) {
-			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null),
+					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 

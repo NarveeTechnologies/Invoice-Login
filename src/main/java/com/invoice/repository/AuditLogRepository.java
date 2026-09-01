@@ -7,5 +7,5 @@ import com.invoice.entity.AuditLog;
 
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
-	
+
 }
