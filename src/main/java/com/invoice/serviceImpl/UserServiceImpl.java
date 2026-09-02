@@ -359,7 +359,12 @@ public class UserServiceImpl implements UserService {
 			javaMailSender.send(mimeMessage);
 			log.info("OTP sent successfully to {}", email);
 		} catch (Exception e) {
+			// Must not be swallowed. This method is @Transactional, so throwing also
+			// rolls back the OTP row saved above — leaving a passcode in the database
+			// that was never delivered would let a later request appear to succeed.
 			log.error("Failed to send OTP email to {}: {}", email, e.getMessage(), e);
+			throw new com.invoice.exception.MailDeliveryException(
+					"We could not send the verification code right now. Please try again in a moment.", e);
 		}
 	}
 
@@ -429,6 +434,8 @@ public class UserServiceImpl implements UserService {
 
 		} catch (Exception e) {
 			log.error("Failed to send OTP email to {}", email, e);
+			throw new com.invoice.exception.MailDeliveryException(
+					"We could not send the verification code right now. Please try again in a moment.", e);
 		}
 	}
 
@@ -828,6 +835,8 @@ public class UserServiceImpl implements UserService {
 			log.info("OTP sent successfully to {}", email);
 		} catch (Exception e) {
 			log.error("Failed to send OTP email to {}: {}", email, e.getMessage(), e);
+			throw new com.invoice.exception.MailDeliveryException(
+					"We could not send the verification code right now. Please try again in a moment.", e);
 		}
 	}
 
