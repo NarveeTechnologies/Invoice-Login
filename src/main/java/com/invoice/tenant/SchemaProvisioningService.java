@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.RestTemplate;
 
 import javax.sql.DataSource;
@@ -21,6 +23,14 @@ public class SchemaProvisioningService {
 
 	private final DataSource rawInvoiceDs;
 	private final RestTemplate restTemplate;
+
+	/**
+	 * Shared key proving this call originates from inside the platform. The
+	 * provisioning endpoints execute DDL and are no longer publicly reachable, so
+	 * this header is now required rather than optional.
+	 */
+	@Value("${internal.api-key:}")
+	private String internalApiKey;
 
 	@Value("${customer.service.internal.url:http://customer:5679}")
 	private String customerServiceUrl;
@@ -187,11 +197,24 @@ public class SchemaProvisioningService {
 	}
 
 	private void notifyService(String url, String serviceName) {
+		if (!org.springframework.util.StringUtils.hasText(internalApiKey)) {
+			// Without the shared key the callee will reject this call. Failing here
+			// is clearer than a 401 buried in a warning log.
+			throw new IllegalStateException(
+					"internal.api-key is not configured — cannot provision " + serviceName
+							+ ". Set INTERNAL_API_KEY to the same value the callee expects.");
+		}
+		HttpHeaders headers = new HttpHeaders();
+		headers.set("X-Internal-Api-Key", internalApiKey);
 		try {
-			restTemplate.postForEntity(url, null, String.class);
+			restTemplate.postForEntity(url, new HttpEntity<>(null, headers), String.class);
 			log.info("{} provisioned via {}", serviceName, url);
 		} catch (Exception e) {
-			log.warn("{} provisioning call failed: {}", serviceName, e.getMessage());
+			// Swallowing this used to report a tenant as provisioned when the remote
+			// clone never happened, leaving a half-created tenant behind.
+			log.error("{} provisioning call failed: {}", serviceName, e.getMessage());
+			throw new IllegalStateException(
+					"Schema provisioning failed at " + serviceName + ": " + e.getMessage(), e);
 		}
 	}
 }
