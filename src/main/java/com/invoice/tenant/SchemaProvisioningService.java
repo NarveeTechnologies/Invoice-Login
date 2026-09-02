@@ -22,7 +22,7 @@ public class SchemaProvisioningService {
 	private final DataSource rawInvoiceDs;
 	private final RestTemplate restTemplate;
 
-	@Value("${customer.service.internal.url:http://localhost:5679}")
+	@Value("${customer.service.internal.url:http://customer:5679}")
 	private String customerServiceUrl;
 
 	public SchemaProvisioningService(@Qualifier("rawDataSource") DataSource rawInvoiceDs, RestTemplate restTemplate) {
