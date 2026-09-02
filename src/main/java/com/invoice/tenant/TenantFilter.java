@@ -26,6 +26,19 @@ public class TenantFilter implements Filter {
 	@Value("${jwt.secret}")
 	private String jwtSecret;
 
+    /** Expected token issuer. Not a secret; verified on every request. */
+    @Value("${jwt.issuer}")
+    private String jwtIssuer;
+
+    /** Expected token audience. Not a secret; verified on every request. */
+    @Value("${jwt.audience}")
+    private String jwtAudience;
+
+    /** Bounded tolerance for clock drift between issuer and verifier. */
+    @Value("${jwt.clock-skew-seconds:30}")
+    private long jwtClockSkewSeconds;
+
+
 	@Override
 	public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
 			throws IOException, ServletException {
@@ -55,6 +68,34 @@ public class TenantFilter implements Filter {
 
 	private Claims parseClaims(String token) {
 		Key key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
-		return Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody();
+		return Jwts.parserBuilder().setSigningKey(key)
+				.requireIssuer(jwtIssuer)
+				.requireAudience(jwtAudience)
+				.setAllowedClockSkewSeconds(jwtClockSkewSeconds)
+				.build().parseClaimsJws(token).getBody();
+	}
+
+	/**
+	 * jjwt treats requireIssuer(null)/requireAudience(null) as "no requirement" and
+	 * silently accepts the token — verified empirically against jjwt 0.11.5. A blank
+	 * jwt.issuer or jwt.audience would therefore disable claim validation with no
+	 * error at all. Refuse to start instead: a service that cannot validate claims
+	 * must not serve traffic.
+	 */
+	@jakarta.annotation.PostConstruct
+	void assertClaimValidationIsConfigured() {
+		if (jwtIssuer == null || jwtIssuer.isBlank()) {
+			throw new IllegalStateException(
+					"jwt.issuer must be set — a blank value silently disables issuer validation.");
+		}
+		if (jwtAudience == null || jwtAudience.isBlank()) {
+			throw new IllegalStateException(
+					"jwt.audience must be set — a blank value silently disables audience validation.");
+		}
+		if (jwtSecret != null
+				&& jwtSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < 32) {
+			throw new IllegalStateException(
+					"jwt.secret must be at least 32 bytes (256 bits) for HS256.");
+		}
 	}
 }
