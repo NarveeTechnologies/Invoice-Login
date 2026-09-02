@@ -103,6 +103,20 @@ public class GlobalExceptionHandler {
 				.body(body(HttpStatus.CONFLICT, "Data integrity violation", request));
 	}
 
+	/**
+	 * Mail delivery failure is a transient downstream problem, not a client error:
+	 * 503 tells the caller to retry, and the frontend already renders that as
+	 * "Service not available. Please try again later." The cause is logged, never
+	 * returned — an SMTP error string can name the mail host and account.
+	 */
+	@ExceptionHandler(MailDeliveryException.class)
+	public ResponseEntity<Map<String, Object>> handleMailDelivery(
+			MailDeliveryException ex, HttpServletRequest request) {
+		log.error("Mail delivery failed at {}: {}", request.getRequestURI(), ex.getMessage(), ex);
+		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+				.body(body(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request));
+	}
+
 	// Generic Exception Handler
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<Map<String, Object>> handleGlobalException(Exception ex, HttpServletRequest request) {

@@ -245,6 +245,11 @@ public class UserController {
 			String email = body.get("email");
 			userServiceImpl.sendOtp(email);
 			return ResponseEntity.ok(new RestAPIResponse("success", "OTP sent successfully", email));
+		} catch (com.invoice.exception.MailDeliveryException e) {
+			// Delivery failure is not a bad request. Let GlobalExceptionHandler answer
+			// 503 so the caller knows to retry; swallowing it here would report success
+			// for a passcode that was never sent.
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.badRequest().body(new RestAPIResponse("error", e.getMessage(), null));
 		}
@@ -256,6 +261,11 @@ public class UserController {
 			String email = body.get("email");
 			userServiceImpl.sendOtpForRegister(email);
 			return ResponseEntity.ok(new RestAPIResponse("success", "OTP sent successfully for registration", email));
+		} catch (com.invoice.exception.MailDeliveryException e) {
+			// Delivery failure is not a bad request. Let GlobalExceptionHandler answer
+			// 503 so the caller knows to retry; swallowing it here would report success
+			// for a passcode that was never sent.
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.badRequest().body(new RestAPIResponse("error", e.getMessage(), null));
 		}
@@ -310,6 +320,11 @@ public class UserController {
 			String email = body.get("email");
 			userServiceImpl.accountnumbersendOTP(email);
 			return ResponseEntity.ok(new RestAPIResponse("success", "OTP sent successfully", email));
+		} catch (com.invoice.exception.MailDeliveryException e) {
+			// Delivery failure is not a bad request. Let GlobalExceptionHandler answer
+			// 503 so the caller knows to retry; swallowing it here would report success
+			// for a passcode that was never sent.
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.badRequest().body(new RestAPIResponse("error", e.getMessage(), null));
 		}

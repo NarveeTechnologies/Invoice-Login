@@ -14,7 +14,7 @@
 	<artifactId>invoice-login-service</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>invoice-login-service</name>
-	<description>Login Service with JPA, Security, Mail, JWT, Eureka</description>
+	<description>Login Service with JPA, Security, Mail, and JWT</description>
 
 	<properties>
 		<java.version>17</java.version>
@@ -102,12 +102,6 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-mail</artifactId>
-		</dependency>
-
-		<!-- Eureka Client -->
-		<dependency>
-			<groupId>org.springframework.cloud</groupId>
-			<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
 		</dependency>
 
 		<!-- Lombok -->
