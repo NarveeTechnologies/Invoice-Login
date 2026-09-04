@@ -99,6 +99,40 @@
         </dependency>
 
 		<!-- Spring Mail -->
+		<!-- Flyway. Invoice-Login had no migration tooling at all: its tables,
+			 otp_challenges included, were whatever ddl-auto=update made of the
+			 entities. flyway-database-postgresql is a separate artifact from
+			 Flyway 10 onward and is required, not optional - without it Flyway
+			 reports "no database support" against Postgres at startup. -->
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+
+		<!-- Integration tests run against a real PostgreSQL. The OTP guarantees
+			 that matter most - row locking under concurrent verification, the
+			 single-use predicate, the rate-limit window - are properties of the
+			 database, and an in-memory substitute would verify none of them. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-mail</artifactId>
@@ -174,7 +208,23 @@
 			</plugin>
 
 			<!-- Spring Boot Plugin -->
+<!-- Integration tests are named *IT and run under failsafe at `mvn verify`.
+				 Surefire only collects *Test, so without this OtpRepositoryIT - the
+				 only coverage of row locking, single-use and the Flyway bootstrap -
+				 would never run in a build. -->
 			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-failsafe-plugin</artifactId>
+				<executions>
+					<execution>
+						<goals>
+							<goal>integration-test</goal>
+							<goal>verify</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+						<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>

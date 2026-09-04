@@ -65,6 +65,21 @@ import jakarta.servlet.http.HttpServletRequest;
 public class UserController {
 
 	@Autowired
+	private com.invoice.otp.ClientIpResolver clientIpResolver;
+
+	/**
+	 * Uniform acknowledgement for every passcode request.
+	 *
+	 * <p>Returned whether or not the address has an account, so that the
+	 * response body, the status code and the shape of the answer carry no
+	 * signal. The correlation id is safe to hand back: it identifies the
+	 * request in the logs and cannot be turned into a passcode.
+	 */
+	private static final String OTP_SENT_MESSAGE =
+			"If that email address has an Invoice account, a verification code is on its way.";
+
+
+	@Autowired
 	private UserServiceImpl userServiceImpl;
 
 	@Autowired
@@ -238,35 +253,51 @@ public class UserController {
 	    }
 	}
 
-	/** Send OTP */
+	/**
+	 * Requests a sign-in passcode.
+	 *
+	 * <p>Answers identically for a registered and an unregistered address. It
+	 * used to return the service exception verbatim, so an unregistered address
+	 * produced 400 "Invalid credentials: email not registered" — an
+	 * account-existence oracle on an endpoint that needs no authentication.
+	 */
 	@PostMapping("/login/send-otp")
-	public ResponseEntity<RestAPIResponse> sendOTP(@RequestBody Map<String, String> body) {
+	public ResponseEntity<RestAPIResponse> sendOTP(@RequestBody Map<String, String> body,
+			HttpServletRequest request) {
+		String email = body.get("email");
+		if (email == null || email.isBlank()) {
+			return ResponseEntity.badRequest()
+					.body(new RestAPIResponse("error", "An email address is required", null));
+		}
 		try {
-			String email = body.get("email");
-			userServiceImpl.sendOtp(email);
-			return ResponseEntity.ok(new RestAPIResponse("success", "OTP sent successfully", email));
-		} catch (com.invoice.exception.MailDeliveryException e) {
-			// Delivery failure is not a bad request. Let GlobalExceptionHandler answer
-			// 503 so the caller knows to retry; swallowing it here would report success
+			userServiceImpl.sendOtp(email, clientIpResolver.contextOf(request));
+		} catch (com.invoice.exception.MailDeliveryException | com.invoice.otp.OtpRateLimitedException e) {
+			// Delivery failure (503) and rate limiting (429) are answered by
+			// GlobalExceptionHandler. Swallowing either here would report success
 			// for a passcode that was never sent.
 			throw e;
 		} catch (Exception e) {
-			return ResponseEntity.badRequest().body(new RestAPIResponse("error", e.getMessage(), null));
+			// Anything else is logged and absorbed into the uniform answer. A
+			// distinct response here is exactly what made this endpoint an oracle.
+			log.warn("send-otp failed for a login request", e);
 		}
+		return ResponseEntity.accepted()
+				.body(new RestAPIResponse("success", OTP_SENT_MESSAGE, null));
 	}
 
 	@PostMapping("/register/send-otp")
-	public ResponseEntity<RestAPIResponse> sendRegisterOtp(@RequestBody Map<String, String> body) {
+	public ResponseEntity<RestAPIResponse> sendRegisterOtp(@RequestBody Map<String, String> body,
+			HttpServletRequest request) {
 		try {
 			String email = body.get("email");
-			userServiceImpl.sendOtpForRegister(email);
+			userServiceImpl.sendOtpForRegister(email, clientIpResolver.contextOf(request));
 			return ResponseEntity.ok(new RestAPIResponse("success", "OTP sent successfully for registration", email));
-		} catch (com.invoice.exception.MailDeliveryException e) {
-			// Delivery failure is not a bad request. Let GlobalExceptionHandler answer
-			// 503 so the caller knows to retry; swallowing it here would report success
-			// for a passcode that was never sent.
+		} catch (com.invoice.exception.MailDeliveryException | com.invoice.otp.OtpRateLimitedException e) {
 			throw e;
 		} catch (Exception e) {
+			// Registration deliberately reports an existing-account collision:
+			// the user has to be told to sign in instead. See
+			// docs/INVOICE_OTP_SECURITY.md on why this differs from login.
 			return ResponseEntity.badRequest().body(new RestAPIResponse("error", e.getMessage(), null));
 		}
 	}
@@ -288,9 +319,11 @@ public class UserController {
 
 	/** Login → OTP & return JWT */
 	@PostMapping("/login")
-	public ResponseEntity<RestAPIResponse> login(@RequestBody LoginRequest request) {
+	public ResponseEntity<RestAPIResponse> login(@RequestBody LoginRequest request,
+			HttpServletRequest httpRequest) {
 		try {
-			Map<String, Object> jwtToken = userServiceImpl.loginWithOtp(request);
+			Map<String, Object> jwtToken =
+					userServiceImpl.loginWithOtp(request, clientIpResolver.contextOf(httpRequest));
 			return ResponseEntity.ok(new RestAPIResponse("success", "Login Successfully", jwtToken));
 		} catch (Exception e) {
 			return ResponseEntity.badRequest().body(new RestAPIResponse("error", e.getMessage(), null));
@@ -299,27 +332,102 @@ public class UserController {
 
 	/** Verify OTP */
 	@PostMapping("/login/verify-otp")
-	public ResponseEntity<RestAPIResponse> verifyOTP(@RequestBody VerifyOtpRequest request) {
+	public ResponseEntity<RestAPIResponse> verifyOTP(@RequestBody VerifyOtpRequest request,
+			HttpServletRequest httpRequest) {
 		try {
-			boolean isValid = userServiceImpl.verifyOtp(request.getEmail(), request.getOtp());
+			boolean isValid = userServiceImpl.verifyOtp(request.getEmail(), request.getOtp(),
+					clientIpResolver.contextOf(httpRequest));
 
 			if (isValid) {
 				return ResponseEntity.ok(new RestAPIResponse("success", "OTP verified successfully", null));
-			} else {
-				return ResponseEntity.badRequest().body(new RestAPIResponse("error", "Invalid or expired OTP", null));
 			}
+			// One message for every failure. Distinguishing "no code outstanding"
+			// from "wrong code" from "expired" told an unauthenticated caller
+			// which address to keep working on.
+			return ResponseEntity.badRequest().body(new RestAPIResponse("error",
+					com.invoice.otp.OtpVerificationResult.userFacingFailureMessage(), null));
 
+		} catch (com.invoice.otp.OtpRateLimitedException e) {
+			throw e;
 		} catch (Exception e) {
-			return ResponseEntity.badRequest().body(new RestAPIResponse("error", e.getMessage(), null));
+			log.warn("verify-otp failed", e);
+			return ResponseEntity.badRequest().body(new RestAPIResponse("error",
+					com.invoice.otp.OtpVerificationResult.userFacingFailureMessage(), null));
 		}
 	}
 
-	@PostMapping("/accountnumbersend-otp")
-	public ResponseEntity<RestAPIResponse> accountnumbersendOTP(@RequestBody Map<String, String> body) {
+	/**
+	 * Verifies a registration passcode.
+	 *
+	 * <p>Distinct from {@code /auth/login/verify-otp}: that one binds LOGIN, and
+	 * a code minted for registration must not be spendable as a sign-in.
+	 */
+	@PostMapping("/register/verify-otp")
+	public ResponseEntity<RestAPIResponse> verifyRegisterOtp(@RequestBody VerifyOtpRequest request,
+			HttpServletRequest httpRequest) {
 		try {
-			String email = body.get("email");
-			userServiceImpl.accountnumbersendOTP(email);
-			return ResponseEntity.ok(new RestAPIResponse("success", "OTP sent successfully", email));
+			boolean isValid = userServiceImpl.verifyRegistrationOtp(request.getEmail(),
+					request.getOtp(), clientIpResolver.contextOf(httpRequest));
+			if (isValid) {
+				return ResponseEntity.ok(
+						new RestAPIResponse("success", "Email verified successfully", null));
+			}
+			return ResponseEntity.badRequest().body(new RestAPIResponse("error",
+					com.invoice.otp.OtpVerificationResult.userFacingFailureMessage(), null));
+		} catch (com.invoice.otp.OtpRateLimitedException e) {
+			throw e;
+		} catch (Exception e) {
+			log.warn("register verify-otp failed", e);
+			return ResponseEntity.badRequest().body(new RestAPIResponse("error",
+					com.invoice.otp.OtpVerificationResult.userFacingFailureMessage(), null));
+		}
+	}
+
+	/**
+	 * Re-authenticates the signed-in user before a bank-detail change.
+	 *
+	 * <p>The address comes from the <strong>token</strong>, not the body. It used
+	 * to be taken from {@code body.get("email")} with no check that it belonged
+	 * to the caller, so any authenticated user could make the service send OTP
+	 * mail to any address on the platform. Verified: a tenant-1001 session sent
+	 * a passcode to a tenant-900 user — the victim's inbox went from 3 messages
+	 * to 4 and an {@code ACCOUNT_NUMBER_CHANGE} challenge was created against
+	 * their account.
+	 *
+	 * <p>That is worth more than the nuisance it looks like. It delivers a
+	 * genuine, correctly-branded security email on demand to a chosen victim,
+	 * which is the setup for "we noticed a bank change on your account, confirm
+	 * the code" — and it spends the victim's own resend allowance, so their real
+	 * bank-detail change starts failing on a rate limit they never used.
+	 *
+	 * <p>This endpoint only ever needs the caller's own address: its whole
+	 * purpose is to re-verify the person already holding the session. A body
+	 * address is accepted but must match, so an existing client that still sends
+	 * one keeps working while a mismatched one is refused.
+	 */
+	@PostMapping("/accountnumbersend-otp")
+	public ResponseEntity<RestAPIResponse> accountnumbersendOTP(@RequestBody Map<String, String> body,
+			@RequestHeader("Authorization") String token, HttpServletRequest request) {
+		final String callerEmail;
+		try {
+			callerEmail = jwtService.extractUsername(token.replace("Bearer", "").trim());
+		} catch (Exception e) {
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+					.body(new RestAPIResponse("error", "Invalid token", null));
+		}
+
+		String requested = body.get("email");
+		if (requested != null && !requested.isBlank()
+				&& !requested.trim().equalsIgnoreCase(callerEmail)) {
+			log.warn("Refused account-number OTP for a different address: caller={} requested={}",
+					callerEmail, requested.trim());
+			return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new RestAPIResponse("error",
+					"A verification code can only be sent to your own email address.", null));
+		}
+
+		try {
+			userServiceImpl.accountnumbersendOTP(callerEmail, clientIpResolver.contextOf(request));
+			return ResponseEntity.ok(new RestAPIResponse("success", "OTP sent successfully", callerEmail));
 		} catch (com.invoice.exception.MailDeliveryException e) {
 			// Delivery failure is not a bad request. Let GlobalExceptionHandler answer
 			// 503 so the caller knows to retry; swallowing it here would report success
@@ -340,14 +448,59 @@ public class UserController {
 				isValid ? "Token is valid" : "Token is invalid", username));
 	}
 
+	/**
+	 * A user's profile, by email address.
+	 *
+	 * <p><strong>This endpoint had no authorization check at all.</strong> It took
+	 * an arbitrary address from the path and returned that person's
+	 * {@link UserProfileResponse} — which carries {@code bankDetails}, {@code taxId},
+	 * {@code ein}, {@code gstin}, address and telephone. Any authenticated user
+	 * could read any other user's banking and tax details by putting their email
+	 * in the URL. Verified against the running service: a user in one tenant
+	 * retrieved another tenant's account number with HTTP 200.
+	 *
+	 * <p>The caller may now read their own profile, or one inside their own
+	 * tenant. The tenant is the {@code adminId} claim, which
+	 * {@code JwtServiceImpl.generateToken} refuses to omit, so it cannot be
+	 * absent from a valid token — and it comes from the signed token rather than
+	 * from anything the browser can set.
+	 *
+	 * <p>Same-tenant access is kept because the manage-users dialog legitimately
+	 * loads a colleague's profile; the other four Angular call sites pass the
+	 * caller's own address.
+	 */
 	@GetMapping("/updated/email/{email}")
-	public ResponseEntity<RestAPIResponse> getUserProfileByEmail(@PathVariable("email") String email) {
+	public ResponseEntity<RestAPIResponse> getUserProfileByEmail(@PathVariable("email") String email,
+			@RequestHeader("Authorization") String token) {
 
-		UserProfileResponse response = userServiceImpl.getUserProfileByEmail(email);
+		final String callerEmail;
+		final Long callerTenant;
+		try {
+			String jwt = token.replace("Bearer", "").trim();
+			callerEmail = jwtService.extractUsername(jwt);
+			callerTenant = jwtService.extractAdminId(jwt);
+		} catch (Exception e) {
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+					.body(new RestAPIResponse("Fail", "Invalid token", null));
+		}
+
+		String requested = email == null ? "" : email.trim();
+		boolean ownProfile = requested.equalsIgnoreCase(callerEmail);
+
+		if (!ownProfile && !userServiceImpl.isInTenant(requested, callerTenant)) {
+			// Deliberately the same answer as "no such user": confirming that an
+			// address exists elsewhere on the platform is itself a disclosure.
+			log.warn("Cross-tenant profile read refused: caller={} tenant={} requested={}",
+					callerEmail, callerTenant, requested);
+			return ResponseEntity.status(HttpStatus.NOT_FOUND)
+					.body(new RestAPIResponse("Fail", "No user found with this email: " + requested, Map.of()));
+		}
+
+		UserProfileResponse response = userServiceImpl.getUserProfileByEmail(requested);
 
 		if (response == null) {
 			return ResponseEntity.status(HttpStatus.NOT_FOUND)
-					.body(new RestAPIResponse("Fail", "No user found with this email: " + email, Map.of()));
+					.body(new RestAPIResponse("Fail", "No user found with this email: " + requested, Map.of()));
 		}
 
 		return ResponseEntity.ok(new RestAPIResponse("Success", "Profile retrieved successfully", response));
@@ -418,6 +571,18 @@ public class UserController {
 	@GetMapping("/{filename:.+}")
 	public ResponseEntity<Resource> getFile(@PathVariable String filename) {
 		try {
+			// Serve only files the caller's own tenant references. Uploads are
+			// named with a UUID, which makes a name hard to guess but is not an
+			// access control -- and a name leaks as soon as it appears in a
+			// response, a log or a referrer header.
+			//
+			// The containment check that stops "../.." escaping the upload
+			// directory lives in loadFile; this is the tenant layer above it.
+			if (!fileStorageService.isFileVisibleToTenant(filename,
+					com.invoice.tenant.SecurityUtils.getCurrentAdminId())) {
+				return ResponseEntity.notFound().build();
+			}
+
 			Resource resource = fileStorageService.loadFile(filename);
 
 			// Detect content type dynamically

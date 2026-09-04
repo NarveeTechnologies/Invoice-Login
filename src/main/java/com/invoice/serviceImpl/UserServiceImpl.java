@@ -34,8 +34,12 @@ import com.invoice.DTO.RegisterRequest;
 import com.invoice.DTO.UserProfileResponse;
 import com.invoice.DTO.ManageUserDTO.ManageUserDTOBuilder;
 import com.invoice.config.MailConfig;
+import com.invoice.otp.OtpHasher;
+import com.invoice.otp.OtpPurpose;
+import com.invoice.otp.OtpRequestContext;
+import com.invoice.otp.OtpService;
+import com.invoice.otp.OtpVerificationResult;
 import com.invoice.entity.ManageUsers;
-import com.invoice.entity.OTP;
 import com.invoice.entity.Privilege;
 import com.invoice.entity.Role;
 import com.invoice.entity.User;
@@ -44,7 +48,6 @@ import com.invoice.repository.AdminRepository;
 import com.invoice.repository.ManageUserRepository;
 import com.invoice.repository.PrivilegeRepository;
 import com.invoice.repository.RoleRepository;
-import com.invoice.repository.TokenRepository;
 import com.invoice.repository.UserRepository;
 import com.invoice.service.UserService;
 
@@ -72,9 +75,6 @@ public class UserServiceImpl implements UserService {
 	private EntityManager entityManager;
 	
 	@Autowired
-	private TokenRepository tokenRepository;
-
-	@Autowired
 	private RoleRepository roleRepository;
 
 	@Autowired
@@ -85,6 +85,34 @@ public class UserServiceImpl implements UserService {
 
 	@Autowired
 	private JavaMailSender javaMailSender;
+
+	@Autowired
+	private OtpService otpService;
+
+	@Autowired
+	private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+	/**
+	 * Whether an account exists, without going through JPA.
+	 *
+	 * <p>Only for the OTP send path. Spring Boot leaves {@code open-in-view}
+	 * enabled, so the first JPA call in a request binds an EntityManager that
+	 * keeps its pooled connection until the response is rendered. On this path
+	 * the response is not rendered until SMTP has answered, so one
+	 * {@code userRepository} call was enough to hold a database connection for
+	 * the entire mail exchange — and fifteen concurrent sends against a stalled
+	 * relay leased the whole pool. A plain JDBC query borrows and returns
+	 * immediately.
+	 *
+	 * <p>Everything off the send path keeps using {@code userRepository}; there
+	 * is no reason to spread this around.
+	 */
+	private boolean accountExistsWithoutJpa(String normalisedEmail) {
+		Integer found = jdbcTemplate.queryForObject(
+				"SELECT count(*) FROM user_info WHERE lower(email) = ?",
+				Integer.class, normalisedEmail);
+		return found != null && found > 0;
+	}
 
 	@Value("${spring.mail.username}")
 	private String fromEmail;
@@ -260,204 +288,100 @@ public class UserServiceImpl implements UserService {
 	}
 
 	/**
-	 * Generate alphanumeric OTP
-	 * 
-	 * @param length - length of OTP (default: 6)
-	 * @return alphanumeric OTP string
+	 * Sends a sign-in passcode.
+	 *
+	 * <p>Generation, hashing, storage, rate limiting, delivery and audit all
+	 * live in {@link OtpService} now. What was here before drew from
+	 * {@code java.util.Random}, stored the passcode in plaintext, hardcoded a
+	 * two-minute expiry, and composed an HTML-only mail inline at three
+	 * separate call sites.
+	 *
+	 * <p>The account lookup is passed as a predicate rather than performed
+	 * here, so that {@code OtpService} controls the order of work and an
+	 * unknown address takes the same path as a known one.
+	 *
+	 * <p><strong>Not {@code @Transactional}, deliberately.</strong> It used to be,
+	 * and the annotation survived the OTP rewrite by inertia. It undid the whole
+	 * point of that rewrite: {@link OtpService#request} carefully runs two short
+	 * transactions with the SMTP call outside both, but an outer transaction
+	 * started here simply wraps all of it, so the connection is held across the
+	 * mail exchange again. Measured against a stalled relay on the running
+	 * stack: fifteen concurrent requests left all ten pool connections
+	 * {@code idle in transaction} for the full SMTP timeout. Nothing in this
+	 * method needs a transaction of its own — the only database work is inside
+	 * OtpService, which manages its own boundaries.
 	 */
-	private String generateAlphanumericOTP(int length) {
-		if (length != 6) {
-			throw new IllegalArgumentException("OTP length must be 6 for this pattern");
-		}
-
-		String alphabets = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-		String numbers = "0123456789";
-
-		Random random = new Random();
-
-		StringBuilder otp = new StringBuilder();
-
-		// Generate 3 random alphabets
-		for (int i = 0; i < 3; i++) {
-			otp.append(alphabets.charAt(random.nextInt(alphabets.length())));
-		}
-
-		// Generate 3 random numbers
-		for (int i = 0; i < 3; i++) {
-			otp.append(numbers.charAt(random.nextInt(numbers.length())));
-		}
-
-		// Now shuffle them so pattern is mixed like A7K9M2
-		List<Character> otpChars = new ArrayList<>();
-		for (char c : otp.toString().toCharArray()) {
-			otpChars.add(c);
-		}
-
-		Collections.shuffle(otpChars);
-
-		StringBuilder finalOtp = new StringBuilder();
-		for (char c : otpChars) {
-			finalOtp.append(c);
-		}
-
-		return finalOtp.toString();
+	@Override
+	public void sendOtp(String emailInput, OtpRequestContext context) {
+		otpService.request(emailInput, OtpPurpose.LOGIN,
+				// Deliberately JDBC, not userRepository: any JPA call here would bind
+				// an EntityManager for the request under open-in-view and hold a
+				// pooled connection across the SMTP exchange that follows.
+				this::accountExistsWithoutJpa,
+				context);
 	}
 
-	@Transactional
+	/**
+	 * Sends a registration passcode.
+	 *
+	 * <p>Registration is the one flow that deliberately reports a collision:
+	 * someone who already has an account has to be told to sign in instead, and
+	 * {@code GET /auth/check-email/{email}} already answers the same question
+	 * without authentication. That disclosure is documented in
+	 * docs/INVOICE_OTP_SECURITY.md rather than being an accident of this method.
+	 *
+	 * <p><strong>Not {@code @Transactional}, deliberately.</strong> It used to be,
+	 * and the annotation survived the OTP rewrite by inertia. It undid the whole
+	 * point of that rewrite: {@link OtpService#request} carefully runs two short
+	 * transactions with the SMTP call outside both, but an outer transaction
+	 * started here simply wraps all of it, so the connection is held across the
+	 * mail exchange again. Measured against a stalled relay on the running
+	 * stack: fifteen concurrent requests left all ten pool connections
+	 * {@code idle in transaction} for the full SMTP timeout. Nothing in this
+	 * method needs a transaction of its own — the only database work is inside
+	 * OtpService, which manages its own boundaries.
+	 */
 	@Override
-	public void sendOtp(String emailInput) {
-		final String email = emailInput.trim().toLowerCase();
+	public void sendOtpForRegister(String emailInput, OtpRequestContext context) {
+		final String email = OtpHasher.normaliseIdentifier(emailInput);
 
-		// Fetch user
-		User user = userRepository.findByEmailIgnoreCase(email)
-				.orElseThrow(() -> new RuntimeException("Invalid credentials: email not registered"));
-
-		// Build full name
-		String fullName = (user.getFullName() != null && !user.getFullName().isBlank()) ? user.getFullName()
-				: (user.getFirstName() != null ? user.getFirstName() : email.split("@")[0]);
-		String safeFullname = HtmlUtils.htmlEscape(fullName);
-
-		// Remove old OTPs
-		tokenRepository.deleteByEmail(email);
-
-		// ✅ Generate new ALPHANUMERIC OTP
-		String otp = generateAlphanumericOTP(6); // 6-character alphanumeric OTP
-		long expiryTime = System.currentTimeMillis() + 2 * 60_000; // 2 minutes
-
-		OTP otpEntity = new OTP(null, email, otp, expiryTime);
-		tokenRepository.save(otpEntity);
-
-		// Send email with designed HTML
-		try {
-			MimeMessage mimeMessage = javaMailSender.createMimeMessage();
-			MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
-			helper.setFrom(fromEmail);
-			helper.setTo(email);
-			helper.setSubject("Login Verification Code - Invoicing Team");
-
-			String htmlContent = "<!DOCTYPE html>" + "<html>" + "<head><meta charset='UTF-8'></head>"
-					+ "<body style='margin:0; padding:0; font-family: Arial, sans-serif; background-color:#f9f9f9;'>"
-					+ "<table align='center' width='600' cellpadding='0' cellspacing='0' style='background:#ffffff; border-radius:8px; box-shadow:0 4px 8px rgba(0,0,0,0.1);'>"
-					+ "<tr>"
-					+ "<td align='center' bgcolor='#2563eb' style='padding:20px; border-top-left-radius:8px; border-top-right-radius:8px;'>"
-					+ "<h2 style='color:#ffffff; margin:0;'> Invoice </h2>" + "</td>" + "</tr>" + "<tr>"
-					+ "<td style='padding:30px;'>" + "<h3 style='color:#004b6e; margin-top:0;'>Invoicing Team</h3>"
-					+ "<p style='font-size:16px; color:#4b5563;'>" + "Hello <strong>" + safeFullname
-					+ "</strong>,<br><br>"
-
-					+ "Thank you for choosing <b>Invoicing Application</b>. Your verification code is:" + "</p>"
-					+ "<div style='display:inline-block; text-align:center; padding:18px 20px; border-radius:12px; background:#eff6ff; font-size:30px; font-weight:700; letter-spacing:0px; color:#1e3a8a;'>"
-					+ otp.trim() + "</div>" + "<p style='text-align:center; font-size:15px; color:#6b7280;'>"
-					+ "This OTP is valid for <strong>2 minutes</strong>. Please do not share this code with anyone."
-					+ "</p>" + "<p style='font-size:14px; color:#333; margin-top:30px;'>"
-					+ "Best Regards,<br><b>Invoicing Team</b>" + "</p>" + "</td>" + "</tr>" + "<tr>"
-					+ "<td align='center' bgcolor='#f1f1f1' style='padding:10px; border-bottom-left-radius:8px; border-bottom-right-radius:8px; font-size:12px; color:#888;'>"
-					+ "2026 Invoicing Team. All rights reserved." + "</td>" + "</tr>" + "</table>" + "</body>"
-					+ "</html>";
-
-			helper.setText(htmlContent, true);
-			javaMailSender.send(mimeMessage);
-			log.info("OTP sent successfully to {}", email);
-		} catch (Exception e) {
-			// Must not be swallowed. This method is @Transactional, so throwing also
-			// rolls back the OTP row saved above — leaving a passcode in the database
-			// that was never delivered would let a later request appear to succeed.
-			log.error("Failed to send OTP email to {}: {}", email, e.getMessage(), e);
-			throw new com.invoice.exception.MailDeliveryException(
-					"We could not send the verification code right now. Please try again in a moment.", e);
-		}
-	}
-
-	@Transactional
-	@Override
-	public void sendOtpForRegister(String emailInput) {
-
-		final String email = emailInput.trim().toLowerCase();
-
-		// ❌ Block if email already exists
-		if (userRepository.existsByEmailIgnoreCase(email)) {
+		// JDBC for the same reason as accountExistsWithoutJpa: this runs on the
+		// send path, ahead of an SMTP call that may stall.
+		if (accountExistsWithoutJpa(email)) {
 			throw new RuntimeException("Email already registered. Please login.");
 		}
 
-		// Clean old OTPs
-		tokenRepository.deleteByEmail(email);
-
-		// ✅ Generate ALPHANUMERIC OTP
-		String otp = generateAlphanumericOTP(6); // 6-character alphanumeric OTP
-		long expiryTime = System.currentTimeMillis() + 2 * 60_000;
-
-		OTP otpEntity = new OTP(null, email, otp, expiryTime);
-		tokenRepository.save(otpEntity);
-
-		// Send email (reuse SAME template)
-		sendOtpEmail(email, email.split("@")[0], otp);
-
-		log.info("Registration OTP sent to {}", email);
-	}
-
-	private void sendOtpEmail(String email, String fullName, String otp) {
-		try {
-			MimeMessage mimeMessage = javaMailSender.createMimeMessage();
-			MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
-
-			helper.setFrom(fromEmail);
-			helper.setTo(email);
-			helper.setSubject("Verification Code - Invoicing Team");
-
-			String safeFullname = HtmlUtils.htmlEscape(fullName);
-
-			String htmlContent = "<!DOCTYPE html>" + "<html>" + "<head><meta charset='UTF-8'></head>"
-					+ "<body style='margin:0; padding:0; font-family: Arial, sans-serif; background-color:#f9f9f9;'>"
-					+ "<table align='center' width='600' cellpadding='0' cellspacing='0' style='background:#ffffff; border-radius:8px; box-shadow:0 4px 8px rgba(0,0,0,0.1);'>"
-					+ "<tr>"
-
-					+ "<td align='center' bgcolor='#2563eb' style='padding:20px; border-top-left-radius:8px; border-top-right-radius:8px;'>"
-					+ "<h2 style='color:#ffffff; margin:0;'>Verify Your Registration</h2>" + "</td>" + "</tr>" + "<tr>"
-					+ "<td style='padding:30px;'>" + "<h3 style='color:#004b6e; margin-top:0;'>Invoicing Team</h3>"
-					+ "<p style='font-size:16px; color:#4b5563;'>" + "Hello <strong>" + safeFullname
-					+ "</strong>,<br><br>"
-
-					+ "Thank you for choosing <b>Invoicing Application</b>. Use the following OTP to complete your Registration:"
-					+ "</p>" + "<div style='text-align:center; margin:32px 0;'>"
-					+ "<div style='display:inline-block; padding:18px 32px; border-radius:12px; border:2px dashed #2563eb; background:#eff6ff; font-size:36px; font-weight:700; letter-spacing:8px; color:#1e3a8a;'>"
-					+ otp + "</div>" + "</div>" + "<p style='text-align:center; font-size:15px; color:#6b7280;'>"
-					+ "This OTP is valid for <strong>2 minutes</strong>. Please do not share this code with anyone."
-
-					+ "</p>" + "<p style='font-size:14px; color:#333; margin-top:30px;'>"
-					+ "Best Regards,<br><b>Invoicing Team</b>" + "</p>" + "</td>" + "</tr>" + "<tr>"
-					+ "<td align='center' bgcolor='#f1f1f1' style='padding:10px; border-bottom-left-radius:8px; border-bottom-right-radius:8px; font-size:12px; color:#888;'>"
-					+ "2026 Invoicing Team. All rights reserved." + "</td>" + "</tr>" + "</table>" + "</body>"
-					+ "</html>";
-
-			helper.setText(htmlContent, true);
-			javaMailSender.send(mimeMessage);
-
-		} catch (Exception e) {
-			log.error("Failed to send OTP email to {}", email, e);
-			throw new com.invoice.exception.MailDeliveryException(
-					"We could not send the verification code right now. Please try again in a moment.", e);
-		}
+		otpService.request(email, OtpPurpose.REGISTRATION,
+				identifier -> false, context);
 	}
 
 	/** ===================== Login with OTP ===================== **/
 	@Override
 	@Transactional
-	public Map<String, Object> loginWithOtp(LoginRequest request) {
+	public Map<String, Object> loginWithOtp(LoginRequest request, OtpRequestContext context) {
 	    String email = request.getEmail().trim().toLowerCase();
 	    String enteredOtp = request.getOtp();
 
-	    // Fetch ManageUsers
+	    // Verify the passcode first, and only then resolve the account.
+	    //
+	    // The order is the point. This method used to look up ManageUsers first
+	    // and throw "Invalid credentials: email not registered", so an
+	    // unauthenticated caller could tell a registered address from an
+	    // unregistered one without holding a code at all. Verification now
+	    // happens against the identifier alone, and every failure — unknown
+	    // address, wrong code, expired, replayed — leaves by the same branch
+	    // with the same message.
+	    OtpVerificationResult verification =
+	            otpService.verify(email, OtpPurpose.LOGIN, enteredOtp, context);
+	    if (!verification.isVerified()) {
+	        throw new RuntimeException(OtpVerificationResult.userFacingFailureMessage());
+	    }
+
+	    // Fetch ManageUsers. Reaching here means a code that was genuinely
+	    // issued to this address was presented, so an absent account is a
+	    // provisioning fault rather than a probe.
 	    ManageUsers manageUser = manageUserRepository.findByEmailIgnoreCase(email)
 	            .orElseThrow(() -> new RuntimeException("Invalid credentials: email not registered"));
-
-	    // Validate OTP
-	    OTP otpEntity = tokenRepository.findByEmailAndOtp(email, enteredOtp)
-	            .orElseThrow(() -> new RuntimeException("Invalid OTP or email"));
-	    if (System.currentTimeMillis() > otpEntity.getExpiryTime()) {
-	        tokenRepository.deleteByEmail(email);
-	        throw new RuntimeException("OTP has expired");
-	    }
-	    tokenRepository.deleteByEmail(email);
 
 	    // Fetch linked User
 	    User user = userRepository.findByEmailIgnoreCase(email)
@@ -561,9 +485,35 @@ public class UserServiceImpl implements UserService {
 		}).orElseThrow(() -> new RuntimeException("User not found with id " + id));
 	}
 
+	/**
+	 * Loads a user for the profile endpoints, which serialise the entity.
+	 *
+	 * <p>Uses the fetch graph rather than the plain finder because Jackson
+	 * serialises this after the transaction has closed — see
+	 * {@code UserRepository.findWithProfileByEmailIgnoreCase}.
+	 */
+	/**
+	 * Whether an address belongs to the given tenant.
+	 *
+	 * <p>The tenant boundary is {@code ManageUsers.adminId}, matching the claim
+	 * the JWT carries. Answers false for an unknown address, so the caller
+	 * cannot distinguish "not in your tenant" from "does not exist".
+	 */
+	@Override
+	@org.springframework.transaction.annotation.Transactional(readOnly = true)
+	public boolean isInTenant(String email, Long tenantAdminId) {
+		if (email == null || email.isBlank() || tenantAdminId == null) {
+			return false;
+		}
+		return manageUserRepository.findByEmailIgnoreCase(OtpHasher.normaliseIdentifier(email))
+				.map(ManageUsers::getAdminId)
+				.filter(tenantAdminId::equals)
+				.isPresent();
+	}
+
 	@Override
 	public Optional<User> getUserByEmail(String email) {
-		return userRepository.findByEmailIgnoreCase(email);
+		return userRepository.findWithProfileByEmailIgnoreCase(email);
 	}
 
 	@Override
@@ -597,11 +547,14 @@ public class UserServiceImpl implements UserService {
 	}
 
 	@Override
+	@org.springframework.transaction.annotation.Transactional(readOnly = true)
 	public UserProfileResponse getUserProfileByEmail(String email) {
 
 		String normalizedEmail = email.trim().toLowerCase();
 
-		Optional<User> userOpt = userRepository.findByEmailIgnoreCase(normalizedEmail);
+		// Fetch graph plus a read-only transaction: this method both reads lazy
+		// associations while mapping and returns a response the serialiser walks.
+		Optional<User> userOpt = userRepository.findWithProfileByEmailIgnoreCase(normalizedEmail);
 		Optional<ManageUsers> muOpt = manageUserRepository.findByEmailIgnoreCase(normalizedEmail);
 
 		if (userOpt.isEmpty() && muOpt.isEmpty()) {
@@ -688,31 +641,43 @@ public class UserServiceImpl implements UserService {
 		return value != null && !value.isBlank();
 	}
 
+	/**
+	 * Standalone verification for the sign-in screen's "check my code" step.
+	 *
+	 * <p>Returns a boolean and nothing else. The previous implementation threw
+	 * three distinguishable messages from this unauthenticated endpoint — "OTP
+	 * not found for this email", "OTP has expired" and "Invalid OTP" — which
+	 * told a caller with no credentials whether an address had a code
+	 * outstanding, and let them tell a stale code from a wrong one. All failures
+	 * are now one answer; the precise reason goes to the audit log.
+	 */
 	@Override
-	@Transactional
-	public boolean verifyOtp(String emailInput, String otpInput) {
+	public boolean verifyOtp(String emailInput, String otpInput, OtpRequestContext context) {
+		return otpService.verify(emailInput, OtpPurpose.LOGIN, otpInput, context).isVerified();
+	}
 
-		final String email = emailInput.trim().toLowerCase();
-
-		// Fetch OTP record
-		OTP otpEntity = tokenRepository.findByEmail(email)
-				.orElseThrow(() -> new RuntimeException("OTP not found for this email"));
-
-		// Check expiry
-		if (System.currentTimeMillis() > otpEntity.getExpiryTime()) {
-			tokenRepository.deleteByEmail(email); // remove expired OTP
-			throw new RuntimeException("OTP has expired");
+	/**
+	 * Verifies a registration passcode.
+	 *
+	 * <p>A separate method from {@link #verifyOtp} because the purposes are
+	 * separate, and that separation is the point: a registration code must not
+	 * satisfy a sign-in and a sign-in code must not complete a registration.
+	 *
+	 * <p>Both flows previously shared {@code POST /auth/login/verify-otp}, which
+	 * worked only because the old table had no purpose column at all. Binding
+	 * the login endpoint to LOGIN without giving registration its own endpoint
+	 * would have left registration unable to verify anything.
+	 */
+	@Override
+	public boolean verifyRegistrationOtp(String emailInput, String otpInput,
+			OtpRequestContext context) {
+		OtpVerificationResult result =
+				otpService.verify(emailInput, OtpPurpose.REGISTRATION, otpInput, context);
+		if (result.isVerified()) {
+			otpService.recordFlowCompletion(OtpPurpose.REGISTRATION,
+					OtpHasher.normaliseIdentifier(emailInput), null);
 		}
-
-		// Validate OTP
-		if (!otpEntity.getOtp().equals(otpInput)) {
-			throw new RuntimeException("Invalid OTP");
-		}
-
-		// OTP is valid → delete it after successful verification
-		tokenRepository.deleteByEmail(email);
-
-		return true;
+		return result.isVerified();
 	}
 
 	public ManageUsers buildManageUsersFromRequest(RegisterRequest request) {
@@ -766,78 +731,17 @@ public class UserServiceImpl implements UserService {
 		return manageUsers;
 	}
 
-	@Transactional
+	/**
+	 * Re-authenticates a signed-in user before a bank-detail change.
+	 *
+	 * <p>Issued under its own purpose. Previously this wrote into the same
+	 * single-row-per-email table that login read, so a code mailed out to
+	 * confirm a bank change also satisfied a sign-in.
+	 */
 	@Override
-	public void accountnumbersendOTP(String emailInput) {
-		final String email = emailInput.trim().toLowerCase();
-
-		// Fetch user
-		User user = userRepository.findByEmailIgnoreCase(email)
-				.orElseThrow(() -> new RuntimeException("Invalid credentials: email not registered"));
-
-		// Build full name
-		String fullName = (user.getFullName() != null && !user.getFullName().isBlank()) ? user.getFullName()
-				: (user.getFirstName() != null ? user.getFirstName() : email.split("@")[0]);
-		String safeFullname = HtmlUtils.htmlEscape(fullName);
-
-		// Remove old OTPs
-		tokenRepository.deleteByEmail(email);
-
-		// ✅ Generate new ALPHANUMERIC OTP
-		String otp = generateAlphanumericOTP(6); // 6-character alphanumeric OTP
-		long expiryTime = System.currentTimeMillis() + 2 * 60_000; // 2 minutes
-
-		OTP otpEntity = new OTP(null, email, otp, expiryTime);
-		tokenRepository.save(otpEntity);
-
-		// Send email with designed HTML
-		try {
-			MimeMessage mimeMessage = javaMailSender.createMimeMessage();
-			MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
-			helper.setFrom(fromEmail);
-			helper.setTo(email);
-			helper.setSubject("Account Number Update Verification Code - Invoicing Team");
-			String htmlContent = "<!DOCTYPE html>" + "<html>" + "<head><meta charset='UTF-8'></head>"
-					+ "<body style='margin:0; padding:0; font-family: Arial, sans-serif; background-color:#f9f9f9;'>"
-					+ "<table align='center' width='600' cellpadding='0' cellspacing='0' style='background:#ffffff; border-radius:8px; box-shadow:0 4px 8px rgba(0,0,0,0.1);'>"
-					+ "<tr>"
-					+ "<td align='center' bgcolor='#2563eb' style='padding:20px; border-top-left-radius:8px; border-top-right-radius:8px;'>"
-					+ "<h2 style='color:#ffffff; margin:0;'> Invoice </h2>" + "</td>" + "</tr>" + "<tr>"
-					+ "<td style='padding:30px;'>" + "<h3 style='color:#004b6e; margin-top:0;'>Invoicing Team</h3>"
-					+ "<p style='font-size:16px; color:#4b5563;'>" + "Hello <strong>" + safeFullname
-					+ "</strong>,<br><br>"
-
-					+ "We received a request to <b>update your account number</b> in the <b>Invoicing Application</b>."
-					+ "<br><br>For security purposes, please use the OTP below to verify this change." + "</p>"
-
-					+ "<div style='text-align:center; margin:32px 0;'>"
-					+ "<div style='display:inline-block; padding:18px 32px; border-radius:12px; border:2px dashed #2563eb; background:#eff6ff; font-size:36px; font-weight:700; letter-spacing:8px; color:#1e3a8a;'>"
-					+ otp + "</div>" + "</div>"
-
-					+ "<p style='text-align:center; font-size:15px; color:#6b7280;'>"
-					+ "This OTP is valid for <strong>2 minutes</strong>. Please do not share this code with anyone."
-					+ "</p>"
-
-					+ "<p style='font-size:14px; color:#333; margin-top:20px;'>"
-					+ "If you did not request this account number update, please contact our support team immediately."
-					+ "</p>"
-
-					+ "<p style='font-size:14px; color:#333; margin-top:30px;'>"
-					+ "Best Regards,<br><b>Invoicing Team</b>" + "</p>"
-
-					+ "</td>" + "</tr>" + "<tr>"
-					+ "<td align='center' bgcolor='#f1f1f1' style='padding:10px; border-bottom-left-radius:8px; border-bottom-right-radius:8px; font-size:12px; color:#888;'>"
-					+ "2026 Invoicing Team. All rights reserved." + "</td>" + "</tr>" + "</table>" + "</body>"
-					+ "</html>";
-
-			helper.setText(htmlContent, true);
-			javaMailSender.send(mimeMessage);
-			log.info("OTP sent successfully to {}", email);
-		} catch (Exception e) {
-			log.error("Failed to send OTP email to {}: {}", email, e.getMessage(), e);
-			throw new com.invoice.exception.MailDeliveryException(
-					"We could not send the verification code right now. Please try again in a moment.", e);
-		}
+	public void accountnumbersendOTP(String emailInput, OtpRequestContext context) {
+		otpService.request(emailInput, OtpPurpose.ACCOUNT_NUMBER_CHANGE,
+				this::accountExistsWithoutJpa, context);
 	}
 
 }
