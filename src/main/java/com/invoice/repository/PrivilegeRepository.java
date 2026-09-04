@@ -39,6 +39,19 @@ public interface PrivilegeRepository extends JpaRepository<Privilege, Long> {
 	void deleteByCategory(@Param("category") String category);
 
 	
+	/**
+	 * Privileges visible to one tenant: its own, plus the shared platform
+	 * definitions.
+	 *
+	 * <p>{@code adminId IS NULL} is deliberately included — {@code createPrivilege}
+	 * does not set an owner, so the shared catalogue has a null tenant. Scoping
+	 * strictly to the caller's tenant would hide it and empty the privileges
+	 * screen; not scoping at all exposed other tenants' custom privileges, which
+	 * is what {@code GET /auth/privileges/getall} was doing.
+	 */
+	@Query("SELECT p FROM Privilege p WHERE p.adminId IS NULL OR p.adminId = :adminId")
+	List<Privilege> findVisibleToTenant(@Param("adminId") Long adminId);
+
 	@Query("SELECT p FROM Privilege p JOIN p.roles r WHERE r.roleId = :roleId")
 	List<Privilege> findByRoles_RoleId(@Param("roleId") Long roleId);
 	

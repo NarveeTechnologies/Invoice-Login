@@ -63,6 +63,11 @@ public class RoleController {
 			return ResponseEntity.status(HttpStatus.CONFLICT)
 					.body(new RestAPIResponse("error", "Role '" + roleDTO.getRoleName() + "' already exists for this admin", null));
 
+		} catch (com.invoice.exception.ResourceNotFoundException e) {
+			// Must not be swallowed by the catch-all below: an authorization
+			// denial or a rejected input answering 500 is indistinguishable
+			// from a server fault.
+			throw e;
 		} catch (RuntimeException e) {
 
 			return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -76,7 +81,8 @@ public class RoleController {
 	}
 	// ✅ Assign privileges category-wise to a role
 	@PostMapping("/privilege/save")
-	public ResponseEntity<RestAPIResponse> assignPrivilegesToRole(@RequestBody Map<String, Object> payload) {
+	public ResponseEntity<RestAPIResponse> assignPrivilegesToRole(@RequestBody Map<String, Object> payload,
+			Authentication authentication) {
 		try {
 			log.info("Received payload: {}", payload);
 
@@ -98,14 +104,19 @@ public class RoleController {
 			Set<Long> privilegeIdSet = privilegeIds.stream().map(Integer::longValue).collect(Collectors.toSet());
 
 			// ✅ Update privileges category-wise
-			roleServiceImpl.updateRolePrivileges(roleId, privilegeIdSet, category);
+			roleServiceImpl.updateRolePrivileges(roleId, privilegeIdSet, category, authentication.getName());
 
 			// ✅ Return refreshed privilege grouping
-			Map<String, List<PrivilegeDTO>> groupedPrivileges = privilegeServiceImpl.getPrivilegesByRole(roleId);
+			Map<String, List<PrivilegeDTO>> groupedPrivileges = privilegeServiceImpl.getPrivilegesByRole(roleId, authentication.getName());
 
 			return ResponseEntity
 					.ok(new RestAPIResponse("success", "Privileges assigned successfully", groupedPrivileges));
 
+		} catch (com.invoice.exception.ResourceNotFoundException | com.invoice.exception.BusinessException e) {
+			// Must not be swallowed by the catch-all below: an authorization
+			// denial or a rejected input answering 500 is indistinguishable
+			// from a server fault.
+			throw e;
 		} catch (Exception e) {
 			log.error("Error assigning privileges: {}", e.getMessage());
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -113,27 +124,18 @@ public class RoleController {
 		}
 	}
 
-	@GetMapping("/search")
-	public ResponseEntity<RestAPIResponse> searchRoles(@RequestParam(defaultValue = "0") int page,
-			@RequestParam(defaultValue = "10") int size, @RequestParam(defaultValue = "roleId") String sortBy,
-			@RequestParam(defaultValue = "asc") String sortDir, @RequestParam(required = false) String keyword) {
-
-		if (size > 100) size = 100;
-		if (size < 1) size = 20;
-		if (page < 0) page = 0;
-
-		Page<RoleDTO> result = roleServiceImpl.searchRoles(page, size, sortBy, sortDir,
-				SanitizerUtils.sanitize(keyword));
-
-		return ResponseEntity.ok(new RestAPIResponse("success", "Roles fetched", result));
-	}
 
 	// Get all roles
 	@GetMapping("/getall")
-	public ResponseEntity<RestAPIResponse> getAllRoles() {
+	public ResponseEntity<RestAPIResponse> getAllRoles(Authentication authentication) {
 		try {
-			List<RoleDTO> roles = roleServiceImpl.getAllRoles();
+			List<RoleDTO> roles = roleServiceImpl.getAllRoles(authentication.getName());
 			return ResponseEntity.ok(new RestAPIResponse("success", "All roles retrieved successfully", roles));
+		} catch (com.invoice.exception.ResourceNotFoundException | com.invoice.exception.BusinessException e) {
+			// Must not be swallowed by the catch-all below: an authorization
+			// denial or a rejected input answering 500 is indistinguishable
+			// from a server fault.
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body(new RestAPIResponse("error", "Failed to retrieve roles: " + e.getMessage(), null));
@@ -142,10 +144,16 @@ public class RoleController {
 
 	// ✅ Get single role by ID
 	@GetMapping("/{roleId}")
-	public ResponseEntity<RestAPIResponse> getRoleById(@PathVariable Long roleId) {
+	public ResponseEntity<RestAPIResponse> getRoleById(@PathVariable Long roleId,
+			Authentication authentication) {
 		try {
-			RoleDTO role = roleServiceImpl.getRoleById(roleId);
+			RoleDTO role = roleServiceImpl.getRoleById(roleId, authentication.getName());
 			return ResponseEntity.ok(new RestAPIResponse("success", "Role retrieved successfully", role));
+		} catch (com.invoice.exception.ResourceNotFoundException | com.invoice.exception.BusinessException e) {
+			// Must not be swallowed by the catch-all below: an authorization
+			// denial or a rejected input answering 500 is indistinguishable
+			// from a server fault.
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body(new RestAPIResponse("error", "Failed to retrieve role: " + e.getMessage(), null));
@@ -154,10 +162,16 @@ public class RoleController {
 
 	// ✅ Get privileges assigned to a role
 	@GetMapping("/{roleId}/privileges")
-	public ResponseEntity<RestAPIResponse> getPrivilegesByRole(@PathVariable Long roleId) {
+	public ResponseEntity<RestAPIResponse> getPrivilegesByRole(@PathVariable Long roleId,
+			Authentication authentication) {
 		try {
-			Map<String, List<PrivilegeDTO>> privileges = privilegeServiceImpl.getPrivilegesByRole(roleId);
+			Map<String, List<PrivilegeDTO>> privileges = privilegeServiceImpl.getPrivilegesByRole(roleId, authentication.getName());
 			return ResponseEntity.ok(new RestAPIResponse("success", "Fetched privileges for role", privileges));
+		} catch (com.invoice.exception.ResourceNotFoundException | com.invoice.exception.BusinessException e) {
+			// Must not be swallowed by the catch-all below: an authorization
+			// denial or a rejected input answering 500 is indistinguishable
+			// from a server fault.
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body(new RestAPIResponse("error", "Failed to fetch privileges: " + e.getMessage(), null));
@@ -176,6 +190,11 @@ public class RoleController {
 			// Duplicate role name on rename.
 			return ResponseEntity.status(HttpStatus.CONFLICT)
 					.body(new RestAPIResponse("error", e.getMessage(), null));
+		} catch (com.invoice.exception.ResourceNotFoundException e) {
+			// Must not be swallowed by the catch-all below: an authorization
+			// denial or a rejected input answering 500 is indistinguishable
+			// from a server fault.
+			throw e;
 		} catch (RuntimeException e) {
 			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new RestAPIResponse("error", e.getMessage(), null));
 		} catch (Exception e) {
@@ -187,7 +206,7 @@ public class RoleController {
 	// ✅ Update privileges for a role
 	@PutMapping("/{roleId}/privileges")
 	public ResponseEntity<RestAPIResponse> updateRolePrivileges(@PathVariable Long roleId,
-			@RequestBody Map<String, Object> payload) {
+			@RequestBody Map<String, Object> payload, Authentication authentication) {
 
 		try {
 			// Extract category and privilege IDs from JSON
@@ -197,9 +216,14 @@ public class RoleController {
 			Set<Long> privilegeIdSet = privilegeIds.stream().map(Integer::longValue).collect(Collectors.toSet());
 
 			// Call category-aware update
-			RoleDTO updated = roleServiceImpl.updateRolePrivileges(roleId, privilegeIdSet, category);
+			RoleDTO updated = roleServiceImpl.updateRolePrivileges(roleId, privilegeIdSet, category, authentication.getName());
 
 			return ResponseEntity.ok(new RestAPIResponse("success", "Privileges updated successfully", updated));
+		} catch (com.invoice.exception.ResourceNotFoundException | com.invoice.exception.BusinessException e) {
+			// Must not be swallowed by the catch-all below: an authorization
+			// denial or a rejected input answering 500 is indistinguishable
+			// from a server fault.
+			throw e;
 		} catch (Exception e) {
 			log.error(" Failed to update privileges for role {}: {}", roleId, e.getMessage());
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -209,14 +233,20 @@ public class RoleController {
 
 	// Delete role
 	@DeleteMapping("/{roleId}")
-	public ResponseEntity<RestAPIResponse> deleteRole(@PathVariable Long roleId) {
+	public ResponseEntity<RestAPIResponse> deleteRole(@PathVariable Long roleId,
+			Authentication authentication) {
 		try {
-			roleServiceImpl.deleteRole(roleId);
+			roleServiceImpl.deleteRole(roleId, authentication.getName());
 			return ResponseEntity.ok(new RestAPIResponse("success", "Role deleted successfully", null));
 		} catch (com.invoice.exception.BusinessException e) {
 			// Role is still assigned to users — a business-rule rejection, not a server error.
 			return ResponseEntity.status(HttpStatus.CONFLICT)
 					.body(new RestAPIResponse("error", e.getMessage(), null));
+		} catch (com.invoice.exception.ResourceNotFoundException e) {
+			// Must not be swallowed by the catch-all below: an authorization
+			// denial or a rejected input answering 500 is indistinguishable
+			// from a server fault.
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body(new RestAPIResponse("error", "Failed to delete role: " + e.getMessage(), null));
@@ -234,6 +264,11 @@ public class RoleController {
 
 			return ResponseEntity.ok(new RestAPIResponse("success", "Roles retrieved successfully", roles));
 
+		} catch (com.invoice.exception.ResourceNotFoundException | com.invoice.exception.BusinessException e) {
+			// Must not be swallowed by the catch-all below: an authorization
+			// denial or a rejected input answering 500 is indistinguishable
+			// from a server fault.
+			throw e;
 		} catch (Exception e) {
 
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -241,7 +276,18 @@ public class RoleController {
 		}
 	}
 
-	@GetMapping("/adminId/search")
+	/**
+	 * Paged role search, confined to the caller's tenant.
+	 *
+	 * <p>Serves both {@code /auth/roles/search} and
+	 * {@code /auth/roles/adminId/search}. They were two endpoints with two
+	 * implementations doing nearly the same thing, and only this one resolved the
+	 * tenant from the authenticated caller — the other used an unscoped
+	 * {@code findAll}/{@code searchAll} and returned every tenant's roles along
+	 * with their privilege names. Mapping both paths to one implementation is
+	 * what stops that reappearing; the duplicate was how it survived.
+	 */
+	@GetMapping({ "/search", "/adminId/search" })
 	public ResponseEntity<RestAPIResponse> searchRoles(@RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "10") int size, @RequestParam(defaultValue = "roleId") String sortBy,
 			@RequestParam(defaultValue = "asc") String sortDir, @RequestParam(required = false) String keyword,

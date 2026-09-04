@@ -13,21 +13,21 @@ public interface RoleService {
 
 	RoleDTO updateRole(Long roleId, RoleDTO roleDTO, String loggedInEmail);
 
-	void deleteRole(Long roleId);
-
-	public Page<RoleDTO> searchRoles(int page, int size, String sortBy, String sortDir, String keyword);
-
-	RoleDTO assignPrivilegeToRole(Long roleId, Long privilegeId, Long adminId);
-
-	List<RoleDTO> getAllRoles();
-
-	RoleDTO getRoleById(Long id);
-
-	// ✅ Updated signature
-	RoleDTO updateRolePrivileges(Long roleId, Set<Long> selectedPrivilegeIds, String category);
-
-	public List<RoleDTO> getRolesByAdminId(Long adminId);
+	void deleteRole(Long roleId, String loggedInEmail);
 
 	public Page<RoleDTO> searchRoles(int page, int size, String sortBy, String sortDir, String keyword,
 			String loggedInEmail);
+
+	RoleDTO assignPrivilegeToRole(Long roleId, Long privilegeId, Long adminId);
+
+	List<RoleDTO> getAllRoles(String loggedInEmail);
+
+	RoleDTO getRoleById(Long id, String loggedInEmail);
+
+	// ✅ Updated signature
+	RoleDTO updateRolePrivileges(Long roleId, Set<Long> selectedPrivilegeIds, String category,
+			String loggedInEmail);
+
+	public List<RoleDTO> getRolesByAdminId(Long adminId);
+
 }

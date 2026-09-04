@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -60,6 +61,7 @@ public class RoleServiceImpl implements RoleService {
 	private static final Logger log = LoggerFactory.getLogger(RoleServiceImpl.class);
 
 	@Override
+	@org.springframework.transaction.annotation.Transactional
 	public RoleDTO createRole(RoleDTO roleDTO, String loggedInEmail) {
 
 		User currentUser = userRepository.findByEmailIgnoreCase(loggedInEmail)
@@ -75,6 +77,18 @@ public class RoleServiceImpl implements RoleService {
 
 		Role role = convertToEntity(roleDTO);
 
+		// The tenant comes from the authenticated caller, never from the body.
+		// convertToEntity copies dto.getAdminId() straight through, so a request
+		// carrying {"adminId": 900} created a role owned by tenant 900 —
+		// verified: a tenant-1001 session produced a role with admin_id = 900,
+		// injected into another tenant's namespace.
+		//
+		// It also fixes the other half of the same bug: with no adminId in the
+		// body the role was saved with admin_id = NULL, which the tenant guards
+		// treat as unreachable — so a role created through the UI was invisible
+		// to the person who had just created it.
+		role.setAdminId(callerTenant.resolve(loggedInEmail).tenant());
+
 		role.setAddedBy(currentUser.getId());
 		role.setAddedByName(currentUser.getFullName());
 		role.setCreatedDate(LocalDateTime.now());
@@ -87,6 +101,12 @@ public class RoleServiceImpl implements RoleService {
 	@Override
 	@Transactional
 	public RoleDTO updateRole(Long roleId, RoleDTO roleDTO, String loggedInEmail) {
+		// Tenant boundary first: this path allowed a tenant-A admin to rename
+		// another tenant's role.
+		assertRoleInCallersTenant(
+				roleRepository.findById(roleId)
+						.orElseThrow(() -> new com.invoice.exception.ResourceNotFoundException("Role not found with ID: " + roleId)),
+				roleId, loggedInEmail);
 
 		// 1️⃣ Get current logged-in user
 		User currentUser = userRepository.findByEmailIgnoreCase(loggedInEmail)
@@ -130,6 +150,7 @@ public class RoleServiceImpl implements RoleService {
 
 	// Assign a single privilege to a role
 	@Override
+	@org.springframework.transaction.annotation.Transactional
 	public RoleDTO assignPrivilegeToRole(Long roleId, Long privilegeId, Long creatorId) {
 		Role role = roleRepository.findById(roleId).orElseThrow(() -> new RuntimeException("Role not found"));
 
@@ -148,47 +169,97 @@ public class RoleServiceImpl implements RoleService {
 	}
 
 	// ✅ Get all roles
+	/**
+	 * Read-only transactional so the DTO mapping below runs inside the
+	 * persistence context. {@code convertToDTO} reads {@code role.getPrivileges()},
+	 * a LAZY {@code @ManyToMany}; without a transaction the entity is already
+	 * detached by the time mapping starts and this throws
+	 * {@code LazyInitializationException} as soon as open-in-view is disabled.
+	 * The comment in {@code convertToDTO} claiming the privileges are "already
+	 * loaded inside the transaction" was only ever true because OSIV kept one open.
+	 */
 	@Override
-	public List<RoleDTO> getAllRoles() {
-		return roleRepository.findAll().stream().map(this::convertToDTO).collect(Collectors.toList());
+	@org.springframework.transaction.annotation.Transactional(readOnly = true)
+	public List<RoleDTO> getAllRoles(String loggedInEmail) {
+		// Tenant-scoped. This listing used to be a bare findAll, so
+		// GET /auth/roles/getall returned every tenant's roles on the platform
+		// — including their names and full privilege sets. Caught by
+		// CrossTenantAuthorizationIT.listingIsScoped, not by hand: the endpoint
+		// answered 200 either way, and only the body told the truth.
+		//
+		// SUPERADMIN keeps the platform-wide view, matching every other listing
+		// in this service.
+		com.invoice.entity.User caller = userRepository.findByEmailIgnoreCase(loggedInEmail)
+				.orElseThrow(() -> new com.invoice.exception.ResourceNotFoundException(
+						"Caller not found: " + loggedInEmail));
+		String callerRole = caller.getRole() != null ? caller.getRole().getRoleName() : null;
+
+		if ("SUPERADMIN".equalsIgnoreCase(callerRole)) {
+			return roleRepository.findAllWithPrivileges().stream().map(this::convertToDTO)
+					.collect(Collectors.toList());
+		}
+
+		Long callerTenant = manageUserRepository.findByEmailIgnoreCase(loggedInEmail)
+				.map(com.invoice.entity.ManageUsers::getAdminId)
+				.orElse(caller.getId());
+
+		return roleRepository.findByAdminIdWithPrivileges(callerTenant).stream().map(this::convertToDTO)
+				.collect(Collectors.toList());
 	}
 
 	// ✅ Get role by ID
 	@Override
-	public RoleDTO getRoleById(Long roleId) {
-		Role role = roleRepository.findById(roleId).orElseThrow(() -> new RuntimeException("Role not found"));
+	@org.springframework.transaction.annotation.Transactional(readOnly = true)
+	public RoleDTO getRoleById(Long roleId, String loggedInEmail) {
+		Role role = roleRepository.findByIdWithPrivileges(roleId)
+				.orElseThrow(() -> new com.invoice.exception.ResourceNotFoundException("Role not found with ID: " + roleId));
+		assertRoleInCallersTenant(role, roleId, loggedInEmail);
 		return convertToDTO(role);
 	}
 
 	// ✅ Update privileges of a role
 	@Transactional
 	@Override
-	public RoleDTO updateRolePrivileges(Long roleId, Set<Long> selectedPrivilegeIds, String category) {
+	public RoleDTO updateRolePrivileges(Long roleId, Set<Long> selectedPrivilegeIds, String category,
+			String loggedInEmail) {
 		log.info("Updating privileges for Role ID: {} and Category: {}", roleId, category);
-		log.info("Selected privilege IDs: {}", selectedPrivilegeIds);
 
 		Role role = roleRepository.findById(roleId)
-				.orElseThrow(() -> new RuntimeException("Role not found with ID: " + roleId));
+				.orElseThrow(() -> new com.invoice.exception.ResourceNotFoundException("Role not found with ID: " + roleId));
 
-		// 🔹 Get currently assigned privileges
-		Set<Privilege> currentPrivileges = new HashSet<>(role.getPrivileges());
-		log.info("Current privileges count: {}", currentPrivileges.size());
+		// Rewriting a role's privileges is privilege escalation if the role is
+		// not ours. The read siblings assert this; this writer did not.
+		assertRoleInCallersTenant(role, roleId, loggedInEmail);
 
-		// 🔹 Fetch all privileges in this category
-		Set<Privilege> categoryPrivileges = privilegeRepository.findByCategory(category);
-		log.info("Found {} privileges in category '{}'", categoryPrivileges.size(), category);
-
-		// 🔹 Fetch privileges selected by user
-		Set<Privilege> selectedPrivileges = privilegeRepository.findAllById(selectedPrivilegeIds).stream()
+		// Two independent things have to be true of every submitted id: it must
+		// belong to the category the caller claims to be editing, and it must be
+		// a privilege this tenant can see at all. The old code trusted the id
+		// list outright, so a foreign id was attached verbatim.
+		com.invoice.security.CallerTenant.Resolved caller = callerTenant.resolve(loggedInEmail);
+		Set<Privilege> categoryPrivileges = privilegeRepository.findByCategory(category).stream()
+				.filter(p -> caller.isSuperAdmin() || caller.owns(p.getAdminId()) || p.getAdminId() == null)
 				.collect(Collectors.toSet());
 
-		// 🔹 Remove unchecked privileges only from this category
-		currentPrivileges.removeIf(p -> categoryPrivileges.contains(p) && !selectedPrivilegeIds.contains(p.getId()));
+		Map<Long, Privilege> selectable = categoryPrivileges.stream()
+				.collect(Collectors.toMap(Privilege::getId, p -> p));
 
-		// 🔹 Add newly selected privileges
-		currentPrivileges.addAll(selectedPrivileges);
+		Set<Long> requested = selectedPrivilegeIds == null ? Set.of() : selectedPrivilegeIds;
+		Set<Long> rejected = requested.stream().filter(id -> !selectable.containsKey(id))
+				.collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+		if (!rejected.isEmpty()) {
+			// Deliberately does not say whether the id is foreign or merely in
+			// another category - that distinction is a probe oracle.
+			throw new BusinessException(
+					"Privileges " + rejected + " are not assignable in category '" + category + "'");
+		}
 
-		// 🔹 Save and update
+		Set<Privilege> currentPrivileges = new HashSet<>(role.getPrivileges());
+
+		// Remove unchecked privileges only from this category.
+		currentPrivileges.removeIf(p -> categoryPrivileges.contains(p) && !requested.contains(p.getId()));
+
+		requested.forEach(id -> currentPrivileges.add(selectable.get(id)));
+
 		role.setPrivileges(currentPrivileges);
 		Role updatedRole = roleRepository.save(role);
 
@@ -199,8 +270,10 @@ public class RoleServiceImpl implements RoleService {
 	}
 
 	@Override
-	public void deleteRole(Long roleId) {
-		Role role = roleRepository.findById(roleId).orElseThrow(() -> new RuntimeException("Role not found"));
+	public void deleteRole(Long roleId, String loggedInEmail) {
+		Role role = roleRepository.findById(roleId)
+				.orElseThrow(() -> new com.invoice.exception.ResourceNotFoundException("Role not found with ID: " + roleId));
+		assertRoleInCallersTenant(role, roleId, loggedInEmail);
 
 		long assignedCount = userRepository.countByRole_RoleId(roleId);
 		if (assignedCount > 0) {
@@ -277,41 +350,21 @@ public class RoleServiceImpl implements RoleService {
 						: Collections.emptySet())
 				.build();
 	}
+	// GET /auth/roles/search used to have its own implementation here, built on
+	// an unscoped findAll/searchAll — it returned every tenant's roles together
+	// with their privilege names. It was a near-duplicate of the overload below,
+	// which already resolves the tenant from the authenticated caller and scopes
+	// correctly. Rather than scope two copies, the endpoint now calls that one,
+	// and this copy is gone. Two implementations of one query is how the
+	// unscoped variant survived in the first place.
 
-	public Page<RoleDTO> searchRoles(int page, int size, String sortBy, String sortDir, String keyword) {
-
-		boolean sortByUserName = "addedByName".equals(sortBy) || "updatedByName".equals(sortBy);
-
-		Pageable pageable = PageRequest.of(page, size, sortByUserName ? Sort.by("roleId") // dummy DB sort
-				: (sortDir.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending()));
-
-		Page<RoleDTO> dtoPage = (keyword == null || keyword.isBlank())
-				? roleRepository.findAll(pageable).map(this::mapToDTO)
-				: roleRepository.searchAll(keyword, pageable).map(this::mapToDTO);
-
-		// IN-MEMORY SORT (CORRECT WAY)
-		if (sortByUserName) {
-			Comparator<RoleDTO> comparator = "addedByName".equals(sortBy)
-					? Comparator.comparing(RoleDTO::getAddedByName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
-					: Comparator.comparing(RoleDTO::getUpdatedByName,
-							Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
-
-			if ("desc".equalsIgnoreCase(sortDir)) {
-				comparator = comparator.reversed();
-			}
-
-			List<RoleDTO> sorted = dtoPage.getContent().stream().sorted(comparator).toList();
-
-			return new PageImpl<>(sorted, pageable, dtoPage.getTotalElements());
-		}
-
-		return dtoPage;
-	}
 
 	@Override
+	@org.springframework.transaction.annotation.Transactional(readOnly = true)
 	public List<RoleDTO> getRolesByAdminId(Long adminId) {
 
-		List<Role> roles = roleRepository.findByAdminId(adminId);
+		// Fetch-joined: convertToDTO reads privileges for every row below.
+		List<Role> roles = roleRepository.findByAdminIdWithPrivileges(adminId);
 
 		if (roles.isEmpty()) {
 			throw new RuntimeException("No roles found for this admin");
@@ -321,6 +374,7 @@ public class RoleServiceImpl implements RoleService {
 	}
 
 	@Override
+	@org.springframework.transaction.annotation.Transactional(readOnly = true)
 	public Page<RoleDTO> searchRoles(int page, int size, String sortBy, String sortDir, String keyword,
 			String loggedInEmail) {
 
@@ -364,4 +418,51 @@ public class RoleServiceImpl implements RoleService {
 
 		return dtoPage;
 	}
+
+	/**
+	 * Refuses a role outside the caller's tenant.
+	 *
+	 * <p>{@code Role.adminId} is the tenant owner, and the listing endpoints
+	 * already scope by it ({@code findByAdminIdWithPrivileges}). The by-id
+	 * endpoints did not, and the consequence was not merely disclosure: a
+	 * tenant-A administrator could read another tenant's role, rename it, and
+	 * delete it outright. Verified live — a role belonging to tenant 7900 was
+	 * renamed to HIJACKED_BY_TENANT_A and then removed, by an administrator of
+	 * tenant 7001.
+	 *
+	 * <p>Roles carry privileges, so this was a cross-tenant access-control
+	 * mutation, not just a data leak.
+	 *
+	 * <p>SUPERADMIN is exempt, matching the listing behaviour. A role with no
+	 * {@code adminId} is treated as unreachable rather than as shared: an
+	 * unowned row must not become everybody's row.
+	 */
+	@Autowired
+	private com.invoice.security.CallerTenant callerTenant;
+
+	private void assertRoleInCallersTenant(Role role, Long roleId, String loggedInEmail) {
+		User caller = userRepository.findByEmailIgnoreCase(loggedInEmail)
+				.orElseThrow(() -> new com.invoice.exception.ResourceNotFoundException("Role not found with ID: " + roleId));
+
+		String roleName = caller.getRole() != null ? caller.getRole().getRoleName() : null;
+		if ("SUPERADMIN".equalsIgnoreCase(roleName)) {
+			return;
+		}
+
+		Long callerTenant = caller.getId();
+		com.invoice.entity.ManageUsers callerRecord =
+				manageUserRepository.findByEmailIgnoreCase(loggedInEmail).orElse(null);
+		if (callerRecord != null && callerRecord.getAdminId() != null) {
+			callerTenant = callerRecord.getAdminId();
+		}
+
+		if (role.getAdminId() == null || !role.getAdminId().equals(callerTenant)) {
+			log.warn("Cross-tenant role access refused: caller={} callerTenant={} roleId={} roleTenant={}",
+					loggedInEmail, callerTenant, roleId, role.getAdminId());
+			// Same message as a missing role: confirming that a role id exists in
+			// another tenant lets a caller enumerate the platform.
+			throw new com.invoice.exception.ResourceNotFoundException("Role not found with ID: " + roleId);
+		}
+	}
+
 }

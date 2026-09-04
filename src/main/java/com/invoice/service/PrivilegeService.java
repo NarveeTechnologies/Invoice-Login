@@ -8,24 +8,24 @@ import com.invoice.DTO.PrivilegeDTO;
 public interface PrivilegeService {
 
 	// Basic CRUD
-	PrivilegeDTO createPrivilege(PrivilegeDTO privilegeDTO);
+	PrivilegeDTO createPrivilege(PrivilegeDTO privilegeDTO, String loggedInEmail);
 
-	PrivilegeDTO updatePrivilege(Long id, PrivilegeDTO privilegeDTO);
+	PrivilegeDTO updatePrivilege(Long id, PrivilegeDTO privilegeDTO, String loggedInEmail);
 
 	// Fetch operations
 	List<PrivilegeDTO> getAllPrivileges();
 
-	PrivilegeDTO getPrivilegeById(Long id);
+	PrivilegeDTO getPrivilegeById(Long id, String loggedInEmail);
 
 	List<PrivilegeDTO> getPrivilegesByCategory(String category);
 
-	Map<String, List<PrivilegeDTO>> getAllPrivilegesGrouped();
+	Map<String, List<PrivilegeDTO>> getAllPrivilegesGrouped(String loggedInEmail);
 
-	Map<String, List<PrivilegeDTO>> getPrivilegesByRole(Long roleId);
+	Map<String, List<PrivilegeDTO>> getPrivilegesByRole(Long roleId, String loggedInEmail);
 
 	Map<String, String> getEndpointPrivilegesMap();
 
-	public void deletePrivilegesByCategoryId(Long categoryId);
+	public void deletePrivilegesByCategoryId(Long categoryId, String loggedInEmail);
 
-	public void deletePrivilege(Long id);
+	public void deletePrivilege(Long id, String loggedInEmail);
 }

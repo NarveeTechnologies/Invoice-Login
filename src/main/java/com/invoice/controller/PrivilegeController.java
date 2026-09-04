@@ -8,6 +8,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,7 +33,8 @@ public class PrivilegeController {
 
 	// ✅ Create Privilege (using DTO)
 	@PostMapping("/save")
-	public ResponseEntity<RestAPIResponse> createPrivilege(@RequestBody PrivilegeDTO privilegeDTO) {
+	public ResponseEntity<RestAPIResponse> createPrivilege(@RequestBody PrivilegeDTO privilegeDTO,
+			Authentication authentication) {
 
 		try {
 
@@ -43,7 +45,7 @@ public class PrivilegeController {
 						.body(new RestAPIResponse("error", "Privilege name is required", null));
 			}
 
-			PrivilegeDTO saved = privilegeServiceImpl.createPrivilege(privilegeDTO);
+			PrivilegeDTO saved = privilegeServiceImpl.createPrivilege(privilegeDTO, authentication.getName());
 
 			return ResponseEntity.ok(new RestAPIResponse("success", "Privilege saved successfully", saved));
 
@@ -67,6 +69,8 @@ public class PrivilegeController {
 			return ResponseEntity.status(HttpStatus.BAD_REQUEST)
 					.body(new RestAPIResponse("error", e.getMessage(), null));
 
+		} catch (com.invoice.exception.ResourceNotFoundException e) {
+			throw e;
 		} catch (Exception e) {
 
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -76,11 +80,13 @@ public class PrivilegeController {
 
 	// ✅ Get all Privileges (grouped by category)
 	@GetMapping("/getall")
-	public ResponseEntity<RestAPIResponse> getAllPrivileges() {
+	public ResponseEntity<RestAPIResponse> getAllPrivileges(Authentication authentication) {
 		try {
-			Map<String, List<PrivilegeDTO>> groupedPrivileges = privilegeServiceImpl.getAllPrivilegesGrouped();
+			Map<String, List<PrivilegeDTO>> groupedPrivileges = privilegeServiceImpl.getAllPrivilegesGrouped(authentication.getName());
 			return ResponseEntity
 					.ok(new RestAPIResponse("success", "Successfully fetched all privileges", groupedPrivileges));
+		} catch (com.invoice.exception.ResourceNotFoundException e) {
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body(new RestAPIResponse("error", "Failed to fetch all privileges: " + e.getMessage(), null));
@@ -89,11 +95,14 @@ public class PrivilegeController {
 
 	// ✅ Get privileges assigned to a specific role
 	@GetMapping("/role/{roleId}")
-	public ResponseEntity<RestAPIResponse> getPrivilegesByRole(@PathVariable Long roleId) {
+	public ResponseEntity<RestAPIResponse> getPrivilegesByRole(@PathVariable Long roleId,
+			Authentication authentication) {
 		try {
-			Map<String, List<PrivilegeDTO>> privileges = privilegeServiceImpl.getPrivilegesByRole(roleId);
+			Map<String, List<PrivilegeDTO>> privileges = privilegeServiceImpl.getPrivilegesByRole(roleId, authentication.getName());
 			return ResponseEntity
 					.ok(new RestAPIResponse("success", "Fetched privileges by role successfully", privileges));
+		} catch (com.invoice.exception.ResourceNotFoundException e) {
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body(new RestAPIResponse("error", "Failed to fetch privileges by role: " + e.getMessage(), null));
@@ -102,10 +111,13 @@ public class PrivilegeController {
 
 	// ✅ Get privilege by ID
 	@GetMapping("/{id}")
-	public ResponseEntity<RestAPIResponse> getPrivilegeById(@PathVariable Long id) {
+	public ResponseEntity<RestAPIResponse> getPrivilegeById(@PathVariable Long id,
+			Authentication authentication) {
 		try {
-			PrivilegeDTO privilege = privilegeServiceImpl.getPrivilegeById(id);
+			PrivilegeDTO privilege = privilegeServiceImpl.getPrivilegeById(id, authentication.getName());
 			return ResponseEntity.ok(new RestAPIResponse("success", "Privilege fetched successfully", privilege));
+		} catch (com.invoice.exception.ResourceNotFoundException e) {
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body(new RestAPIResponse("error", "Failed to fetch privilege: " + e.getMessage(), null));
@@ -118,6 +130,8 @@ public class PrivilegeController {
 		try {
 			Map<String, String> map = privilegeServiceImpl.getEndpointPrivilegesMap();
 			return ResponseEntity.ok(new RestAPIResponse("success", "Fetched endpoint privileges", map));
+		} catch (com.invoice.exception.ResourceNotFoundException e) {
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body(new RestAPIResponse("error", "Failed to fetch endpoint privileges: " + e.getMessage(), null));
@@ -127,10 +141,13 @@ public class PrivilegeController {
 	// ✅ Update Privilege
 	@PutMapping("/{id}")
 	public ResponseEntity<RestAPIResponse> updatePrivilege(@PathVariable Long id,
-			@RequestBody PrivilegeDTO privilegeDTO) {
+			@RequestBody PrivilegeDTO privilegeDTO,
+			Authentication authentication) {
 		try {
-			PrivilegeDTO updated = privilegeServiceImpl.updatePrivilege(id, privilegeDTO);
+			PrivilegeDTO updated = privilegeServiceImpl.updatePrivilege(id, privilegeDTO, authentication.getName());
 			return ResponseEntity.ok(new RestAPIResponse("success", "Privilege updated successfully", updated));
+		} catch (com.invoice.exception.ResourceNotFoundException e) {
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body(new RestAPIResponse("error", "Failed to update privilege: " + e.getMessage(), null));
@@ -141,9 +158,10 @@ public class PrivilegeController {
 	// Roles are granted as ROLE_* authorities (see JwtAuthFilter), so use hasAnyRole
 	// (which prepends ROLE_) — hasAnyAuthority('ADMIN') would never match a role.
 	@PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
-	public ResponseEntity<RestAPIResponse> deletePrivilegesByCategoryId(@PathVariable Long id) {
+	public ResponseEntity<RestAPIResponse> deletePrivilegesByCategoryId(@PathVariable Long id,
+			Authentication authentication) {
 		try {
-			privilegeServiceImpl.deletePrivilegesByCategoryId(id);
+			privilegeServiceImpl.deletePrivilegesByCategoryId(id, authentication.getName());
 
 			return ResponseEntity.ok(new RestAPIResponse("success",
 					"All privileges under the same category deleted successfully", null));
@@ -160,6 +178,8 @@ public class PrivilegeController {
 			return ResponseEntity.badRequest()
 					.body(new RestAPIResponse("error", "Invalid privilege ID: " + e.getMessage(), null));
 
+		} catch (com.invoice.exception.ResourceNotFoundException e) {
+			throw e;
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new RestAPIResponse("error",
 					"Failed to delete privileges for privilege ID " + id + ": " + e.getMessage(), null));
