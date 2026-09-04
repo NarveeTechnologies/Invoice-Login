@@ -29,6 +29,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -211,6 +212,14 @@ public class ManageUsersServiceImpl implements ManageUserService {
 			// 🔹 Update Existing User
 			User existingUser = existingUserOpt.get();
 
+			// Backfill for a row that predates this fix or was created by
+			// another path. Only ever set, never changed to a different tenant:
+			// silently re-homing an existing user would move which schema their
+			// data comes from.
+			if (!StringUtils.hasText(existingUser.getCompanyDomain())) {
+				existingUser.setCompanyDomain(savedManageUser.getCompanyDomain());
+			}
+
 			if (existingUser.getCreatedBy() == null) {
 				existingUser.setCreatedBy(currentUser);
 			}
@@ -229,6 +238,15 @@ public class ManageUsersServiceImpl implements ManageUserService {
 			User user = new User();
 
 			user.setEmail(savedManageUser.getEmail());
+			// The tenant key. Without it this user_info row has a null
+			// company_domain, so JwtServiceImpl omits the companyDomain claim,
+			// TenantFilter sets no schema, and TenantRoutingDataSource falls
+			// back to the DEFAULT datasource. Every tenant's sub-users then
+			// share one schema, where the customer service's unscoped vendor
+			// queries see -- and can delete -- each other's rows. The value was
+			// already resolved and written to manage_users above; it was simply
+			// not copied here.
+			user.setCompanyDomain(savedManageUser.getCompanyDomain());
 			user.setFirstName(savedManageUser.getFirstName());
 			user.setMiddleName(savedManageUser.getMiddleName());
 			user.setLastName(savedManageUser.getLastName());
@@ -336,7 +354,12 @@ public class ManageUsersServiceImpl implements ManageUserService {
 
 		// ---------------- 2️⃣ Fetch existing ManageUsers ----------------
 		ManageUsers existing = manageUserRepository.findById(id)
-				.orElseThrow(() -> new RuntimeException("User not found with ID: " + id));
+				.orElseThrow(() -> new com.invoice.exception.ResourceNotFoundException("User not found with ID: " + id));
+
+		// This method previously had no authorization check of any kind — not
+		// tenant, not role. Any authenticated caller could modify any user on the
+		// platform by changing the id in the URL.
+		assertSameTenant(currentUser, existing, id);
 
 		String oldFullName = existing.getFullName();
 		String oldFirstName = existing.getFirstName();
@@ -506,6 +529,10 @@ public class ManageUsersServiceImpl implements ManageUserService {
 		User currentUser = getCurrentLoggedInUser(loggedInEmail);
 		ManageUsers manageUser = manageUserRepository.findById(id)
 				.orElseThrow(() -> new RuntimeException("User not found"));
+
+		// Tenant boundary before any role logic: deleting another tenant's user is
+		// worse than reading one, and this path had no domain check at all.
+		assertSameTenant(currentUser, manageUser, id);
 
 		if ("ADMIN".equalsIgnoreCase(currentUser.getRole().getRoleName())
 				&& "SUPERADMIN".equalsIgnoreCase(manageUser.getRoleName())) {
@@ -757,7 +784,9 @@ public class ManageUsersServiceImpl implements ManageUserService {
 	public ManageUserDTO getByIdAndLoggedInUser(Long id, String loggedInEmail) {
 		User currentUser = getCurrentLoggedInUser(loggedInEmail);
 		ManageUsers targetUser = manageUserRepository.findById(id)
-				.orElseThrow(() -> new RuntimeException("User not found with ID: " + id));
+				.orElseThrow(() -> new com.invoice.exception.ResourceNotFoundException("User not found with ID: " + id));
+
+		assertSameTenant(currentUser, targetUser, id);
 
 		String role = currentUser.getRole().getRoleName();
 		if ("SUPERADMIN".equalsIgnoreCase(role)) {
@@ -1090,6 +1119,49 @@ public class ManageUsersServiceImpl implements ManageUserService {
 	@Override
 	public Optional<ManageUsers> findByAdminId(Long adminId) {
 		throw new UnsupportedOperationException("Not implemented");
+	}
+
+
+	/**
+	 * Refuses a record outside the caller's tenant.
+	 *
+	 * <p>The list endpoints in this service have always scoped by
+	 * {@code companyDomain} — {@code findByCompanyDomainIgnoreCase(domain)}, with
+	 * the domain derived server-side from the authenticated user's email. The
+	 * by-id endpoints did not. They checked <em>role</em> only, so an ADMIN in one
+	 * tenant could read, update and delete records belonging to another. Verified
+	 * live: a tenant-1001 ADMIN retrieved a tenant-900 user with HTTP 200.
+	 *
+	 * <p>That asymmetry is the whole defect. A collection query that filters and a
+	 * single-record lookup that does not is the most common shape of a
+	 * cross-tenant IDOR, because the list screen looks correct in testing while
+	 * the detail URL is what an attacker actually edits.
+	 *
+	 * <p>SUPERADMIN stays exempt: it is a platform-operator role, and the list
+	 * path already treats it that way. Every other role is confined to its own
+	 * domain.
+	 *
+	 * <p>Throws the same message as a missing record on purpose — telling a caller
+	 * that an id exists in a tenant they cannot see is itself a disclosure, and
+	 * lets them enumerate the platform's user ids.
+	 */
+	private void assertSameTenant(User currentUser, ManageUsers target, Long requestedId) {
+		String role = currentUser.getRole() != null ? currentUser.getRole().getRoleName() : null;
+		if ("SUPERADMIN".equalsIgnoreCase(role)) {
+			return;
+		}
+
+		String callerDomain = extractDomain(currentUser.getEmail());
+		String targetDomain = (target.getCompanyDomain() != null && !target.getCompanyDomain().isBlank())
+				? target.getCompanyDomain()
+				: extractDomain(target.getEmail());
+
+		if (callerDomain == null || targetDomain == null || !callerDomain.equalsIgnoreCase(targetDomain)) {
+			log.warn("Cross-tenant ManageUsers access refused: caller={} callerDomain={} "
+					+ "targetId={} targetDomain={}",
+					currentUser.getEmail(), callerDomain, requestedId, targetDomain);
+			throw new com.invoice.exception.ResourceNotFoundException("User not found with ID: " + requestedId);
+		}
 	}
 
 }

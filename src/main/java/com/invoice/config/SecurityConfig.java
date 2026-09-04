@@ -49,19 +49,24 @@ public class SecurityConfig {
 			.sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+				.requestMatchers(HttpMethod.GET, "/companies", "/companies/active", "/companies/{domain}")
+						.permitAll()
 				.requestMatchers(
 						"/auth/login",
 						"/auth/login/send-otp",
 						"/auth/register",
 						"/auth/register/send-otp",
 						"/auth/login/verify-otp",
+						"/auth/register/verify-otp",
 						"/auth/check-email/**",
 						"/auth/check-token",
 						"/auth/validate-token",
 						"/auth/get-registration-token",
-						"/companies",
-						"/companies/active",
-						"/companies/{domain}",
+						// Reads only, and only GET -- the mutating endpoints under
+						// /companies must authenticate so their @PreAuthorize
+						// applies. Spring matches these by pattern, so
+						// "/companies/{domain}" does not cover
+						// "/companies/{domain}/reprovision".
 						"/actuator/health",
 						"/actuator/info"
 				).permitAll()

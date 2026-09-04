@@ -76,6 +76,21 @@ public class ManageUsers {
 	@JoinColumn(name = "roleid")
 	private Role role;
 
+	/**
+	 * Who added this user. Never serialised.
+	 *
+	 * <p>{@code createdBy} directly below was already {@code @JsonIgnore}; this
+	 * one was not, and they are the same association to the same entity. Any
+	 * response carrying a {@code ManageUsers} would therefore have exposed a
+	 * full {@link User} — role, privileges and bank details included — for
+	 * whoever added the account.
+	 *
+	 * <p>No endpoint returns this entity today (the controllers all map to
+	 * {@code ManageUserDTO}, which carries {@code addedBy} as an id string), so
+	 * this is closing the hole before someone adds one. The equivalent field on
+	 * {@link User} was disclosing exactly this data through {@code /auth/me}.
+	 */
+	@JsonIgnore
 	@ManyToOne(fetch = FetchType.EAGER)
 	@JoinColumn(name = "added_by_user_id")
 	private User addedBy;

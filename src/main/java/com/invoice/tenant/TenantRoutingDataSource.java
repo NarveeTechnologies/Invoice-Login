@@ -60,7 +60,7 @@ public class TenantRoutingDataSource extends AbstractRoutingDataSource {
 	}
 
 	private String withSchema(String schemaName) {
-		String base = baseJdbcUrl.replaceAll("[?&]currentSchema=[^&]*", "");
-		return base.contains("?") ? base + "&currentSchema=" + schemaName : base + "?currentSchema=" + schemaName;
+		// Driver-aware; see TenantDataSourceConfig.withSchema.
+		return com.invoice.config.TenantDataSourceConfig.withSchema(baseJdbcUrl, schemaName);
 	}
 }

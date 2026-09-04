@@ -22,4 +22,7 @@ public interface AdminService {
 	public Admin updateSettings(Long adminId, Admin settings);
 
 	public void resetSettings(Long adminId);
+
+	/** The caller's own admin profile. See the implementation for why getAll() is unsafe. */
+	java.util.List<com.invoice.entity.Admin> getAllForTenant(Long adminId);
 }

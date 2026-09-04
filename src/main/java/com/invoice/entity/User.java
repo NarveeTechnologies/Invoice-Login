@@ -1,6 +1,7 @@
 package com.invoice.entity;
 
 import java.util.List;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -53,6 +54,30 @@ public class User {
 
 	private String position;
 
+	/**
+	 * Who created this account. Never serialised.
+	 *
+	 * <p>Two reasons, and the second is the important one.
+	 *
+	 * <p>It made {@code spring.jpa.open-in-view=false} impossible. Endpoints such
+	 * as {@code /auth/me} return this entity directly, so Jackson walks into the
+	 * creator and then into <em>their</em> lazy collections. Fetching a level
+	 * deeper does not help — the creator has a creator — so no entity graph can
+	 * terminate it. Jackson's own reference chain said so plainly:
+	 * {@code RestAPIResponse["data"] -> User["createdBy"] -> User["bankDetails"]}.
+	 *
+	 * <p>And it was disclosing another user's private data. With open-in-view
+	 * enabled, Jackson lazily loaded the whole creator record on the way past, so
+	 * {@code GET /auth/me} returned that person's full profile — <strong>bank
+	 * account number and routing number included</strong> — to anyone who could
+	 * read their own profile. Verified against the running service before this
+	 * annotation was added.
+	 *
+	 * <p>Nothing consumed it: no DTO carries it, the Angular app never reads it,
+	 * and it is only ever assigned server-side. The id and name of a creator are
+	 * already exposed separately where they are actually wanted.
+	 */
+	@JsonIgnore
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "created_by_id")
 	private User createdBy;

@@ -57,13 +57,43 @@ public class FileStorageServiceImpl implements FileStorageService {
 
 	@Override
 	public Resource loadFile(String filename) throws IOException {
-		Path filePath = uploadDir.resolve(filename).normalize(); // ✅ works now
+		Path base = uploadDir.toAbsolutePath().normalize();
+		Path filePath = base.resolve(filename).normalize();
+
+		// Containment check. normalize() collapses "..", but nothing here
+		// verified the RESULT was still inside uploadDir -- so a filename of
+		// "../../etc/passwd" resolved outside it and was served. Any
+		// authenticated user could read any file the process could read.
+		//
+		// The equivalent endpoints in the customer service already had this
+		// check; this one did not.
+		if (!filePath.startsWith(base)) {
+			throw new IOException("File not found: " + filename);
+		}
+
 		UrlResource resource = new UrlResource(filePath.toUri());
 		if (resource.exists() && resource.isReadable()) {
 			return resource;
 		} else {
 			throw new IOException("File not found: " + filename);
 		}
+	}
+
+	/**
+	 * Whether the caller's own tenant references this file.
+	 *
+	 * <p>Defence in depth behind the containment check. Uploads are named with
+	 * a UUID, so a name is impractical to guess — but unguessability is not an
+	 * access control, and a name leaks the moment it appears in any response,
+	 * log or referrer.
+	 */
+	@Override
+	public boolean isFileVisibleToTenant(String filename, Long adminId) {
+		if (filename == null || adminId == null) {
+			return false;
+		}
+		return manageUsersRepository.existsByCompanylogoAndAdminId(filename, adminId)
+				|| manageUsersRepository.existsProfilePictureForTenant(filename, adminId);
 	}
 
 	@Override

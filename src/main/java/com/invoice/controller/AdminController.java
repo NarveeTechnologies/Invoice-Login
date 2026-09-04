@@ -32,7 +32,7 @@ public class AdminController {
 			return new ResponseEntity<>(new RestAPIResponse("Success", "Profile saved successfully", savedAdmin),
 					HttpStatus.OK);
 		} catch (Exception e) {
-			return new ResponseEntity<>(new RestAPIResponse("Fail", "Profile not saved: " + e.getMessage(), null),
+			return new ResponseEntity<>(new RestAPIResponse("Fail", "Profile not saved", null),
 					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
@@ -41,12 +41,17 @@ public class AdminController {
 	public ResponseEntity<RestAPIResponse> getAll() {
 		try {
 			// Touch SecurityUtils so a misconfigured filter chain fails fast
-			SecurityUtils.getCurrentAdminId();
+			Long adminId = SecurityUtils.getCurrentAdminId();
+			// Scoped. This called adminServiceImpl.getAll() -- findAll() -- and
+			// returned every tenant's profile, including taxId and businessId.
+			// getCurrentAdminId() was called here and its result thrown away.
 			return new ResponseEntity<>(
-					new RestAPIResponse("Success", "All profiles retrieved successfully", adminServiceImpl.getAll()),
+					new RestAPIResponse("Success", "All profiles retrieved successfully",
+							adminServiceImpl.getAllForTenant(adminId)),
 					HttpStatus.OK);
 		} catch (Exception e) {
-			return new ResponseEntity<>(new RestAPIResponse("Fail", "No profiles found: " + e.getMessage(), null),
+			log.error("Failed to list admin profiles", e);
+			return new ResponseEntity<>(new RestAPIResponse("Fail", "No profiles found", null),
 					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
@@ -83,8 +88,17 @@ public class AdminController {
 			}
 			return new ResponseEntity<>(new RestAPIResponse("Success", "Profile updated successfully", updatedAdmin),
 					HttpStatus.OK);
+		} catch (SecurityUtils.SecurityIntegrityException e) {
+			// Must not be swallowed by the catch-all below. It was: the tenant
+			// guard aborted the update correctly, but the response came back as
+			// a 500 -- indistinguishable from a server fault -- and carried
+			// e.getMessage(), which reads "resource adminId=X does not match
+			// authenticated adminId=Y". That bypassed the fixed message the
+			// exception handler now returns.
+			throw e;
 		} catch (Exception e) {
-			return new ResponseEntity<>(new RestAPIResponse("Fail", "Profile not updated: " + e.getMessage(), null),
+			log.error("Failed to update admin profile {}", id, e);
+			return new ResponseEntity<>(new RestAPIResponse("Fail", "Profile not updated", null),
 					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
@@ -96,7 +110,7 @@ public class AdminController {
 			Admin settings = adminServiceImpl.getSettings(adminId);
 			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings retrieved", settings), HttpStatus.OK);
 		} catch (Exception e) {
-			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+			return new ResponseEntity<>(new RestAPIResponse("Fail", "Settings unavailable", null), HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -110,7 +124,7 @@ public class AdminController {
 			}
 			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings updated", updated), HttpStatus.OK);
 		} catch (Exception e) {
-			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+			return new ResponseEntity<>(new RestAPIResponse("Fail", "Settings unavailable", null), HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -121,7 +135,7 @@ public class AdminController {
 			adminServiceImpl.resetSettings(adminId);
 			return new ResponseEntity<>(new RestAPIResponse("Success", "Settings reset to defaults", null), HttpStatus.OK);
 		} catch (Exception e) {
-			return new ResponseEntity<>(new RestAPIResponse("Fail", e.getMessage(), null), HttpStatus.INTERNAL_SERVER_ERROR);
+			return new ResponseEntity<>(new RestAPIResponse("Fail", "Settings unavailable", null), HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -139,8 +153,11 @@ public class AdminController {
 			}
 			return new ResponseEntity<>(new RestAPIResponse("Success", "Profile deleted successfully", null),
 					HttpStatus.OK);
+		} catch (SecurityUtils.SecurityIntegrityException e) {
+			throw e;
 		} catch (Exception e) {
-			return new ResponseEntity<>(new RestAPIResponse("Fail", "Profile not deleted: " + e.getMessage(), null),
+			log.error("Failed to delete admin profile {}", id, e);
+			return new ResponseEntity<>(new RestAPIResponse("Fail", "Profile not deleted", null),
 					HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}

@@ -57,8 +57,25 @@ public class TenantDataSourceConfig {
 		return router;
 	}
 
-	static String withSchema(String url, String schema) {
-		String base = url.replaceAll("[?&]currentSchema=[^&]*", "");
-		return base.contains("?") ? base + "&currentSchema=" + schema : base + "?currentSchema=" + schema;
+	public static String withSchema(String url, String schema) {
+		if (url == null || schema == null || schema.isBlank()) {
+			return url;
+		}
+
+		// currentSchema is a PostgreSQL JDBC parameter. This appended it to
+		// whatever URL it was handed, which corrupts a non-PostgreSQL one --
+		// it cost Invoice-Service 7 tests and the AI and fraud services 1 each,
+		// all failing at context load, and 6 of Invoice-Service's were the
+		// authorization tests for its schema-provisioning endpoint. Anything
+		// that is not PostgreSQL is now returned untouched rather than guessed
+		// at. See INVOICE_PLATFORM_TENANT_AUDIT.md and JdbcUrlSchemaPinningTest.
+		if (url.startsWith("jdbc:postgresql:")) {
+			String base = url.replaceAll("[?&]currentSchema=[^&]*", "");
+			return base.contains("?")
+					? base + "&currentSchema=" + schema
+					: base + "?currentSchema=" + schema;
+		}
+
+		return url;
 	}
 }

@@ -165,4 +165,22 @@ public interface ManageUserRepository extends JpaRepository<ManageUsers, Long>, 
 
 
 
+
+	// ------------------------------------------------------------------
+	// Used to authorise access to an uploaded file by its name
+	// (GET /auth/{filename}). Files are stored under a UUID, so a name is hard
+	// to guess -- but "hard to guess" is not an access control, and the same
+	// endpoint had no containment check either.
+	// ------------------------------------------------------------------
+
+	boolean existsByCompanylogoAndAdminId(String companylogo, Long adminId);
+
+	@org.springframework.data.jpa.repository.Query("""
+			SELECT COUNT(u) > 0 FROM User u
+			WHERE u.profilePicPath = :fileName
+			  AND EXISTS (SELECT 1 FROM ManageUsers m
+						  WHERE LOWER(m.email) = LOWER(u.email) AND m.adminId = :adminId)
+			""")
+	boolean existsProfilePictureForTenant(@org.springframework.data.repository.query.Param("fileName") String fileName,
+			@org.springframework.data.repository.query.Param("adminId") Long adminId);
 }

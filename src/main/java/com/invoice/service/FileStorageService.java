@@ -11,4 +11,7 @@ public interface FileStorageService {
 	public Resource loadFile(String filename) throws IOException;
 
 	public String updateLogo(Long createdBy, MultipartFile file) throws IOException;
+
+	/** Whether the given tenant references this uploaded file. See loadFile. */
+	boolean isFileVisibleToTenant(String filename, Long adminId);
 }

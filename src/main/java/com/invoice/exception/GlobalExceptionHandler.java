@@ -41,9 +41,16 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(SecurityUtils.SecurityIntegrityException.class)
 	public ResponseEntity<Map<String, Object>> handleSecurityIntegrity(
 			SecurityUtils.SecurityIntegrityException ex, HttpServletRequest request) {
+		// The detail stays in the log. The response carries a fixed string
+		// rather than ex.getMessage(), which read
+		// "resource adminId=X does not match authenticated adminId=Y" and named
+		// the mechanism back to the caller. Nothing there belonged to a third
+		// party -- both ids are the caller's own or supplied by them -- but the
+		// refusals elsewhere on this platform name no mechanism, and this one
+		// should not either.
 		log.warn("Security integrity violation at {}: {}", request.getRequestURI(), ex.getMessage());
 		return ResponseEntity.status(HttpStatus.FORBIDDEN)
-				.body(body(HttpStatus.FORBIDDEN, ex.getMessage(), request));
+				.body(body(HttpStatus.FORBIDDEN, "Access denied", request));
 	}
 
 	@ExceptionHandler(AccessDeniedException.class)
@@ -115,6 +122,36 @@ public class GlobalExceptionHandler {
 		log.error("Mail delivery failed at {}: {}", request.getRequestURI(), ex.getMessage(), ex);
 		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
 				.body(body(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request));
+	}
+
+	/**
+	 * A passcode request refused by a ceiling.
+	 *
+	 * <p>429 with Retry-After, so the client can disable its resend button for
+	 * the right interval instead of guessing. The body names no ceiling: telling
+	 * an abusive caller whether they hit the per-address or the per-IP limit
+	 * tells them how to spread the next attempt.
+	 */
+	@ExceptionHandler(com.invoice.otp.OtpRateLimitedException.class)
+	public ResponseEntity<Map<String, Object>> handleOtpRateLimited(
+			com.invoice.otp.OtpRateLimitedException ex, HttpServletRequest request) {
+		log.warn("OTP rate limit hit at {} retryAfterSeconds={}",
+				request.getRequestURI(), ex.getRetryAfterSeconds());
+		return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+				.header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+				.body(body(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request));
+	}
+
+	/**
+	 * 404 for "does not exist" and for "exists but not yours" alike — see
+	 * {@link ResourceNotFoundException}.
+	 */
+	@ExceptionHandler(ResourceNotFoundException.class)
+	public ResponseEntity<Map<String, Object>> handleNotFound(
+			ResourceNotFoundException ex, HttpServletRequest request) {
+		log.info("Not found or not permitted at {}: {}", request.getRequestURI(), ex.getMessage());
+		return ResponseEntity.status(HttpStatus.NOT_FOUND)
+				.body(body(HttpStatus.NOT_FOUND, ex.getMessage(), request));
 	}
 
 	// Generic Exception Handler

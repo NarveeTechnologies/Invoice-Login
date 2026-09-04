@@ -36,6 +36,27 @@ public class AdminServiceImpl implements AdminService {
 		return adminRepository.findAll();
 	}
 
+	/**
+	 * The caller's own admin profile, as a list.
+	 *
+	 * <p>{@code GET /auth/updated/getall} called {@link #getAll()} — a bare
+	 * {@code findAll()} — and returned **every tenant's** profile. The
+	 * {@code updated_profile} table holds {@code taxId}, {@code businessId},
+	 * both email addresses and both phone numbers, so that was every tenant's
+	 * tax and business identifiers to any authenticated caller. The handler did
+	 * call {@code SecurityUtils.getCurrentAdminId()} and then discarded the
+	 * result.
+	 *
+	 * <p>A profile row is keyed by the adminId itself (see
+	 * {@code findAdminProfile}), so a tenant-scoped "get all" is the caller's
+	 * own record — at most one row. The endpoint keeps its list shape so its
+	 * response contract does not change.
+	 */
+	@Override
+	public List<Admin> getAllForTenant(Long adminId) {
+		return findAdminProfile(adminId).map(java.util.List::of).orElseGet(java.util.List::of);
+	}
+
 	@Override
 	public Admin updateProfile(Long id, Admin updatedAdmin) {
 		// Update an existing admin; return null if not found
@@ -141,12 +162,11 @@ public class AdminServiceImpl implements AdminService {
 
 	@Override
 	public User getById(Long id) {
-		// Return null if admin not found
-		// return adminRepository.findById(id).orElse(null);
-		log.error("{}", id);
-
-		User user = repository.findById(id).orElse(null);
-		log.error("{}", user);
+		// Returns null if not found.
+		// Fetch graph, not findById: this User is serialised by Jackson after the
+		// transaction closes, and its bankDetails, createdBy and role.privileges
+		// are all lazy. See UserRepository.findWithProfileById.
+		User user = repository.findWithProfileById(id).orElse(null);
 		return user;
 	}
 

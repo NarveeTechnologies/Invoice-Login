@@ -43,7 +43,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 			"/auth/check-token",
 			"/auth/validate-token",
 			"/auth/get-registration-token",
-			"/companies",
+			// "/companies" deliberately absent: see doFilterInternal. A prefix
+			// entry here made every mutating /companies endpoint unauthenticated
+			// and therefore permanently 403.
 			"/actuator/health",
 			"/actuator/info"
 	};
@@ -59,6 +61,25 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 				filterChain.doFilter(request, response);
 				return;
 			}
+		}
+
+		// "/companies" is a prefix match above, which swallowed the whole
+		// subtree -- including POST /companies/{domain}/reprovision,
+		// POST /companies/reprovision-all and PUT /companies/{domain}/deactivate.
+		// No token was ever parsed on those paths, so their @PreAuthorize ran
+		// against an anonymous context and they answered 403 to everyone: dead
+		// endpoints rather than exploitable ones.
+		//
+		// Only the GET reads are pre-authentication by design (a login screen
+		// resolving a tenant). Everything else under /companies must
+		// authenticate, so the authorization on those handlers can actually
+		// take effect.
+		if (path.equals("/companies") || path.startsWith("/companies/")) {
+			if ("GET".equalsIgnoreCase(request.getMethod())) {
+				filterChain.doFilter(request, response);
+				return;
+			}
+			// fall through: parse the token as for any other protected path
 		}
 
 		String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);

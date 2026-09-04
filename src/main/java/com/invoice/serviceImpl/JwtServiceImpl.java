@@ -128,6 +128,19 @@ public class JwtServiceImpl {
 
 	// ================= EXTRACT USERNAME =================
 
+	/**
+	 * The authoritative tenant claim. Written by
+	 * {@link #generateToken(com.invoice.entity.User, Long, String, java.util.Set)},
+	 * which refuses to issue a token without it, so any valid token has one.
+	 */
+	public Long extractAdminId(String token) {
+		Object claim = extractAllClaims(token).get("adminId");
+		if (claim instanceof Number number) {
+			return number.longValue();
+		}
+		return claim == null ? null : Long.valueOf(claim.toString());
+	}
+
 	public String extractUsername(String token) {
 		return extractAllClaims(token).getSubject();
 	}
