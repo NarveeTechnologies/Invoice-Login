@@ -146,6 +146,14 @@ public class GlobalExceptionHandler {
 	 * 404 for "does not exist" and for "exists but not yours" alike — see
 	 * {@link ResourceNotFoundException}.
 	 */
+	@ExceptionHandler(BankChangeVerificationException.class)
+	public ResponseEntity<Map<String, Object>> handleBankChangeUnverified(
+			BankChangeVerificationException ex, HttpServletRequest request) {
+		log.info("Bank change refused at {}: {}", request.getRequestURI(), ex.getMessage());
+		return ResponseEntity.status(HttpStatus.FORBIDDEN)
+				.body(body(HttpStatus.FORBIDDEN, ex.getMessage(), request));
+	}
+
 	@ExceptionHandler(ResourceNotFoundException.class)
 	public ResponseEntity<Map<String, Object>> handleNotFound(
 			ResourceNotFoundException ex, HttpServletRequest request) {

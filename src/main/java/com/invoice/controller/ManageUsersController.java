@@ -76,10 +76,26 @@ public class ManageUsersController {
 		return ResponseEntity.ok(new RestAPIResponse("Success", "User updated successfully", updatedUser));
 	}
 
+	@Autowired
+	private com.invoice.otp.ClientIpResolver clientIpResolver;
+
+	@Autowired
+	private com.invoice.serviceImpl.UserServiceImpl userServiceImpl;
+
+	/**
+	 * The caller's own profile. The body's id must be theirs; see updateOwnProfile.
+	 *
+	 * <p>Answers the same profile shape as {@code GET /auth/updated/email/{email}}
+	 * rather than the {@code User} entity it used to return: with open-in-view
+	 * off, serialising the entity reached its lazy associations outside the
+	 * transaction and the save answered 500 after committing.
+	 */
 	@PutMapping("/updated/save")
-	public ResponseEntity<?> updateUser(@RequestBody UserUpdateRequest request) {
-		User updatedUser = manageUsersService.updateUserProfileDynamic(request);
-		return ResponseEntity.ok(updatedUser);
+	public ResponseEntity<?> updateUser(@RequestBody UserUpdateRequest request,
+			jakarta.servlet.http.HttpServletRequest httpRequest) {
+		String callerEmail = SecurityUtils.getCurrentUserEmail();
+		manageUsersService.updateOwnProfile(request, callerEmail, clientIpResolver.contextOf(httpRequest));
+		return ResponseEntity.ok(userServiceImpl.getUserProfileByEmail(callerEmail));
 	}
 
 	// 🔹 Get available roles for dropdowns (UI helper)

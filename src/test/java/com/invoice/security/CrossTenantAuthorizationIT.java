@@ -31,6 +31,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import com.invoice.entity.User;
 import com.invoice.repository.UserRepository;
 import com.invoice.serviceImpl.JwtServiceImpl;
+import com.invoice.mail.EmailNotificationService;
+import org.mockito.ArgumentCaptor;
+import org.springframework.boot.test.mock.mockito.MockBean;
 
 /**
  * Cross-tenant authorization, asserted against a running application.
@@ -127,6 +130,12 @@ class CrossTenantAuthorizationIT {
 
 	@Autowired
 	UserRepository userRepository;
+	/**
+	 * The OTP mailer, mocked so the bank-change test can read the code it would
+	 * have sent. Everything else in this class only needs the send to succeed.
+	 */
+	@MockBean
+	EmailNotificationService mail;
 
 	private String tenantAToken;
 	private String tenantBToken;
@@ -1131,6 +1140,104 @@ class CrossTenantAuthorizationIT {
 			assertEquals(HttpStatus.OK, response.getStatusCode());
 			assertFalse(String.valueOf(response.getBody()).contains(B_NAME),
 					"the user listing exposed another tenant's user");
+		}
+	}
+
+	// ======================================================================
+	@Nested
+	@DisplayName("T-15  the profile update is the caller's own, and a bank change needs the code")
+	class OwnProfileUpdate {
+		private String bankChange(String accountNumber, String otp) {
+			return "{\"id\":" + TENANT_A + ",\"bankDetails\":[{\"bankName\":\"New Bank\","
+					+ "\"bankAccountNumber\":\"" + accountNumber + "\",\"routingNumber\":\"111000025\"}]"
+					+ (otp == null ? "" : ",\"otp\":\"" + otp + "\"") + "}";
+		}
+
+		@Test
+		@DisplayName("naming another user's id is refused, leaks nothing, and changes neither their profile nor their bank")
+		void crossTenantProfileUpdateRefused() {
+			// This body used to be honoured as written: PUT /auth/updated/save
+			// loaded userRepository.findById(request.id) with no check that the
+			// id was the caller's, then replaced that user's bank rows.
+			String body = "{\"id\":" + TENANT_B + ",\"fullName\":\"OVERWRITTEN_BY_TENANT_A\","
+					+ "\"address\":\"ATTACKER STREET\",\"bankDetails\":[{\"bankName\":\"Attacker Bank\","
+					+ "\"bankAccountNumber\":\"ATTACKER-ACCT-1001\",\"routingNumber\":\"111000025\"}]}";
+			assertDeniedWithoutLeaking(asTenantA(HttpMethod.PUT, "/auth/updated/save", body),
+					"PUT /auth/updated/save naming another user");
+			assertEquals("Vic B", scalar("SELECT full_name FROM user_info WHERE id = ?", TENANT_B),
+					"the refused update still renamed the victim");
+			assertEquals(B_ADDRESS, scalar("SELECT address FROM user_info WHERE id = ?", TENANT_B));
+			assertEquals(B_ACCOUNT,
+					scalar("SELECT bank_account_number FROM bank_details WHERE user_id = ?", TENANT_B),
+					"the refused update still replaced the victim's bank account");
+		}
+
+		@Test
+		@DisplayName("the caller's own non-bank fields save without a code")
+		void ownAddressSaves() {
+			ResponseEntity<String> response = asTenantA(HttpMethod.PUT, "/auth/updated/save",
+					"{\"id\":" + TENANT_A + ",\"address\":\"1001 Renamed Street\",\"city\":\"Plano\"}");
+			assertEquals(HttpStatus.OK, response.getStatusCode(), response.getBody());
+			assertEquals("1001 Renamed Street", scalar("SELECT address FROM user_info WHERE id = ?", TENANT_A));
+			// Put it back for the other tests in the class.
+			jdbc.update("UPDATE user_info SET address = ?, city = NULL WHERE id = ?", "1001 Own Street", TENANT_A);
+		}
+
+		@Test
+		@DisplayName("a bank-account change without a code is refused and the account is unchanged")
+		void bankChangeWithoutCodeRefused() {
+			ResponseEntity<String> response = asTenantA(HttpMethod.PUT, "/auth/updated/save",
+					bankChange("NEW-ACCT-NO-CODE", null));
+			assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode(), response.getBody());
+			assertEquals(A_OWN_MARKER,
+					scalar("SELECT bank_account_number FROM bank_details WHERE user_id = ?", TENANT_A));
+		}
+
+		@Test
+		@DisplayName("a bank-account change with a wrong code is refused and the account is unchanged")
+		void bankChangeWithWrongCodeRefused() {
+			ResponseEntity<String> response = asTenantA(HttpMethod.PUT, "/auth/updated/save",
+					bankChange("NEW-ACCT-WRONG-CODE", "ZZZZZZ"));
+			assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode(), response.getBody());
+			assertEquals(A_OWN_MARKER,
+					scalar("SELECT bank_account_number FROM bank_details WHERE user_id = ?", TENANT_A));
+		}
+
+		@Test
+		@DisplayName("a bank-account change with the code that was actually sent is accepted")
+		void bankChangeWithSentCodeAccepted() {
+			// The colleague's own account: the admin's resend cooldown is already
+			// spent by T-10, and a rate-limit answer here would test the limiter,
+			// not the save.
+			String colleague = mintTokenFor(A_COLLEAGUE_EMAIL, TENANT_A);
+			org.mockito.Mockito.clearInvocations(mail);
+			ResponseEntity<String> sent = call(HttpMethod.POST, "/auth/accountnumbersend-otp", colleague,
+					"{\"email\":\"" + A_COLLEAGUE_EMAIL + "\"}");
+			assertTrue(sent.getStatusCode().is2xxSuccessful(), sent.getBody());
+			ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+			org.mockito.Mockito.verify(mail).sendOtp(org.mockito.ArgumentMatchers.eq(A_COLLEAGUE_EMAIL),
+					org.mockito.ArgumentMatchers.eq(com.invoice.otp.OtpPurpose.ACCOUNT_NUMBER_CHANGE),
+					code.capture(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
+			String body = "{\"id\":1002,\"bankDetails\":[{\"bankName\":\"New Bank\","
+					+ "\"bankAccountNumber\":\"NEW-ACCT-VERIFIED\",\"routingNumber\":\"111000025\"}],"
+					+ "\"otp\":\"" + code.getValue() + "\"}";
+			ResponseEntity<String> response = call(HttpMethod.PUT, "/auth/updated/save", colleague, body);
+			assertEquals(HttpStatus.OK, response.getStatusCode(), response.getBody());
+			assertEquals("NEW-ACCT-VERIFIED",
+					scalar("SELECT bank_account_number FROM bank_details WHERE user_id = ?", 1002L));
+			// The answer is the profile, not the entity, and carries the new account.
+			assertTrue(response.getBody().contains("NEW-ACCT-VERIFIED"));
+			jdbc.update("DELETE FROM bank_details WHERE user_id = ?", 1002L);
+		}
+
+		@Test
+		@DisplayName("the sign-in address cannot be changed through the profile")
+		void signInAddressNotEditable() {
+			ResponseEntity<String> response = asTenantA(HttpMethod.PUT, "/auth/updated/save",
+					"{\"id\":" + TENANT_A + ",\"email\":\"attacker@tenant-a.example.com\"}");
+			assertEquals(HttpStatus.OK, response.getStatusCode(), response.getBody());
+			assertEquals(A_ADMIN_EMAIL, scalar("SELECT email FROM user_info WHERE id = ?", TENANT_A));
 		}
 	}
 
