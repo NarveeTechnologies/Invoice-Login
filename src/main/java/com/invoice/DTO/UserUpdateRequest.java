@@ -50,5 +50,10 @@ public class UserUpdateRequest {
 	private String designation;
 	private String dateOfIncorporation;
 	private List<BankDetails> bankDetails;
+	/**
+	 * The ACCOUNT_NUMBER_CHANGE code sent to the caller's own address. Required
+	 * only when the set of bank account numbers changes; ignored otherwise.
+	 */
+	private String otp;
 
 }

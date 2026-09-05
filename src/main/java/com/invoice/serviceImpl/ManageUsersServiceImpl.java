@@ -803,6 +803,67 @@ public class ManageUsersServiceImpl implements ManageUserService {
 		}
 	}
 
+	@Autowired
+	private com.invoice.otp.OtpService otpService;
+
+	/**
+	 * The profile screen's save, scoped to the caller.
+	 *
+	 * <p>{@link #updateUserProfileDynamic} loads {@code userRepository.findById(request.getId())}
+	 * and both front ends supplied that id from the profile they had loaded, so
+	 * any authenticated user could name any other user's id and rewrite that
+	 * person's profile -- bank account number and routing number included, the
+	 * two fields that decide where invoice payments go. The id is now the
+	 * caller's, and a body id that names anyone else answers exactly as a missing
+	 * record would.
+	 *
+	 * <p>The bank-change code: both front ends requested and collected an
+	 * ACCOUNT_NUMBER_CHANGE code before saving new bank details, and no endpoint
+	 * verified it, so the control was a dialog and nothing more. It is verified
+	 * here, on the server, when the set of account numbers actually changes.
+	 *
+	 * <p>The sign-in address ({@code email}) is not editable through the profile:
+	 * a changed sign-in address plus the OTP login is an account takeover, and
+	 * neither UI offers the field.
+	 */
+	@Override
+	@Transactional
+	public User updateOwnProfile(UserUpdateRequest request, String callerEmail,
+			com.invoice.otp.OtpRequestContext context) {
+		User caller = userRepository.findByEmailIgnoreCase(callerEmail)
+				.orElseThrow(() -> new com.invoice.exception.ResourceNotFoundException("User not found"));
+		if (request.getId() != null && !request.getId().equals(caller.getId())) {
+			log.warn("Profile update refused: caller {} named user id {}", callerEmail, request.getId());
+			throw new com.invoice.exception.ResourceNotFoundException("User not found");
+		}
+		request.setId(caller.getId());
+		request.setEmail(null);
+
+		if (request.getBankDetails() != null
+				&& accountNumbersChanged(caller.getBankDetails(), request.getBankDetails())) {
+			String code = request.getOtp();
+			if (code == null || code.isBlank()) {
+				throw new com.invoice.exception.BankChangeVerificationException(
+						"A verification code sent to your email is required to change bank account details.");
+			}
+			com.invoice.otp.OtpVerificationResult verdict = otpService.verify(callerEmail,
+					com.invoice.otp.OtpPurpose.ACCOUNT_NUMBER_CHANGE, code, context);
+			if (!verdict.isVerified()) {
+				throw new com.invoice.exception.BankChangeVerificationException(
+						com.invoice.otp.OtpVerificationResult.userFacingFailureMessage());
+			}
+		}
+		return updateUserProfileDynamic(request);
+	}
+
+	/** Same rule as the front ends' bankAccountsChanged: account numbers only, blanks ignored, order ignored. */
+	static boolean accountNumbersChanged(List<BankDetails> before, List<BankDetails> after) {
+		java.util.function.Function<List<BankDetails>, List<String>> numbers = list -> list == null ? List.of()
+				: list.stream().map(BankDetails::getBankAccountNumber)
+						.filter(n -> n != null && !n.isBlank()).map(String::trim).sorted().toList();
+		return !numbers.apply(before).equals(numbers.apply(after));
+	}
+
 	@Override
 	@Transactional
 	public User updateUserProfileDynamic(UserUpdateRequest request) {

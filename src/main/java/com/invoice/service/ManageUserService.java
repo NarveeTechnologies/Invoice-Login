@@ -55,6 +55,13 @@ public interface ManageUserService {
 
 	User updateUserProfileDynamic(UserUpdateRequest request);
 
+	/**
+	 * Updates the caller's own profile (PUT /auth/updated/save). The target is
+	 * the authenticated user, never the body's {@code id}; a bank-account change
+	 * needs a verified ACCOUNT_NUMBER_CHANGE code.
+	 */
+	User updateOwnProfile(UserUpdateRequest request, String callerEmail, com.invoice.otp.OtpRequestContext context);
+
 	
 	UserUpdateRequest mapToDto(User user);
 
